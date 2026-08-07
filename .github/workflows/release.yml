@@ -38,7 +38,7 @@ jobs:
           echo "version=$RAW_VERSION" >> "$GITHUB_OUTPUT"
           echo "number=${RAW_VERSION#v}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
