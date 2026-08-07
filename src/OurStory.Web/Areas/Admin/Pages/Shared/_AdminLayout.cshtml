@@ -1,0 +1,123 @@
+@inject AssetVersionProvider Assets
+@inject ISettingsService SettingsService
+@{
+	var site = await SettingsService.GetAsync();
+	var active = ViewData["ActiveMenu"] as string ?? string.Empty;
+	var flash = TempData["Flash"] as string;
+
+	// OnTabBar 决定这一项会不会出现在手机底栏里。底栏最多留五格，
+	// 以后再加功能就保持 false，让它落进「更多」那张卡片，底栏不会越挤越窄。
+	var menu = new (string Key, string Url, string Icon, string Label, bool OnTabBar)[]
+	{
+		("dashboard", "/admin", "layout-dashboard", "总览", true),
+		("moments", "/admin/moments", "camera", "点点滴滴", true),
+		("comments", "/admin/comments", "message-circle-heart", "留言", true),
+		("media", "/admin/media", "image", "图片", true),
+		("settings", "/admin/settings", "settings", "站点设置", false),
+		("account", "/admin/account", "key-round", "账号", false)
+	};
+
+	var tabs = menu.Where(item => item.OnTabBar).Take(4).ToArray();
+	var rest = menu.Except(tabs).ToArray();
+	var moreActive = rest.Any(item => item.Key == active);
+}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="theme-color" content="#fffaf8" media="(prefers-color-scheme: light)">
+	<meta name="theme-color" content="#17151b" media="(prefers-color-scheme: dark)">
+	<title>@ViewData["Title"] · @site.SiteTitle 后台</title>
+	<link rel="icon" href="/favicon.ico">
+	<link rel="stylesheet" href="@Assets.Url("assets/variables.css")">
+	<link rel="stylesheet" href="@Assets.Url("assets/admin.css")">
+	<script>
+			(function () {
+				var mode = null;
+				try { mode = localStorage.getItem('cc-color-mode'); } catch (e) {}
+				if (mode !== 'light' && mode !== 'dark') {
+					mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+				}
+				document.documentElement.dataset.theme = mode;
+			}());
+	</script>
+</head>
+<body class="admin">
+	@Sprite()
+
+	@* 手机上的顶栏：固定在最上面，只放站名和配色开关，页面标题交给下面的 .admin-top *@
+	<header class="admin-bar">
+		<a class="admin-logo" href="/"><span>CC</span> Our Story</a>
+		<button class="admin-theme" type="button" data-theme-toggle aria-label="切换配色">@Icon("sun", "icon-sun")@Icon("moon-star", "icon-moon")</button>
+	</header>
+
+	<div class="admin-shell">
+		<aside class="admin-side">
+			<a class="admin-logo" href="/"><span>CC</span> Our Story</a>
+			<nav aria-label="后台导航">
+				@foreach (var item in menu)
+				{
+					<a href="@item.Url" class="@(active == item.Key ? "is-active" : null)">@Icon(item.Icon)<span>@item.Label</span></a>
+				}
+			</nav>
+			<div class="admin-side-foot">
+				<a href="/" target="_blank" rel="noopener">@Icon("house")<span>查看站点</span></a>
+				<a href="/logout">@Icon("log-out")<span>退出</span></a>
+			</div>
+		</aside>
+
+		@* 内容限宽居中：屏幕再宽，正文也不会被拉成一整行看不完的长条 *@
+		<main class="admin-main">
+			<div class="admin-canvas">
+				<header class="admin-top">
+					<div>
+						<p>@ViewData["Eyebrow"]</p>
+						<h1>@ViewData["Title"]</h1>
+					</div>
+					<div class="admin-who">
+						@Icon("user-round")<span>@site.RoleName(User.Role())</span>
+						<button class="admin-theme" type="button" data-theme-toggle aria-label="切换配色">@Icon("sun", "icon-sun")@Icon("moon-star", "icon-moon")</button>
+					</div>
+				</header>
+
+				@if (!string.IsNullOrEmpty(flash))
+				{
+					<p class="admin-flash">@Icon("check")@flash</p>
+				}
+
+				@RenderBody()
+			</div>
+		</main>
+	</div>
+
+	@* 手机上的底栏：四个常用页面加一个「更多」，位置固定，不跟着内容滚 *@
+	<nav class="admin-tabs" aria-label="后台导航">
+		@foreach (var item in tabs)
+		{
+			<a href="@item.Url" class="@(active == item.Key ? "is-active" : null)">@Icon(item.Icon)<span>@item.Label</span></a>
+		}
+		<button type="button" class="@(moreActive ? "is-active" : null)" data-sheet-open aria-controls="admin-more" aria-expanded="false">@Icon("ellipsis")<span>更多</span></button>
+	</nav>
+
+	<div class="admin-sheet" id="admin-more" data-sheet>
+		<div class="admin-sheet-mask" data-sheet-close></div>
+		<div class="admin-sheet-card" role="dialog" aria-modal="true" aria-label="更多">
+			<div class="admin-sheet-handle"></div>
+			<p class="admin-sheet-who">@Icon("user-round")<span>@site.RoleName(User.Role())</span></p>
+			<div class="admin-sheet-links">
+				@foreach (var item in rest)
+				{
+					<a href="@item.Url" class="@(active == item.Key ? "is-active" : null)">@Icon(item.Icon)<span>@item.Label</span></a>
+				}
+				<a href="/" target="_blank" rel="noopener">@Icon("house")<span>查看站点</span></a>
+				<a href="/logout">@Icon("log-out")<span>退出</span></a>
+			</div>
+			<button class="btn btn-ghost admin-sheet-dismiss" type="button" data-sheet-close>@Icon("x")收起</button>
+		</div>
+	</div>
+
+	<script src="@Assets.Url("assets/admin.js")" defer></script>
+	@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

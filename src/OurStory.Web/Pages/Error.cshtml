@@ -1,0 +1,12 @@
+@page "/error/{code:int?}"
+@model ErrorModel
+@{
+    ViewData["Bundle"] = "moments";
+    ViewData["Title"] = "页面走丢了";
+}
+<main class="empty-page" id="main">
+    @Icon("heart-crack")
+    <p>404 · LOST MOMENT</p>
+    <h1>这一页暂时走丢了</h1>
+    <a href="/">@Icon("house")回到我们的小宇宙</a>
+</main>

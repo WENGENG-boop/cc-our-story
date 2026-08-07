@@ -1,0 +1,74 @@
+@page "/admin/comments"
+@model OurStory.Web.Areas.Admin.Pages.Comments.IndexModel
+@{
+    ViewData["ActiveMenu"] = "comments";
+    ViewData["Eyebrow"] = "COMMENTS";
+    ViewData["Title"] = "留言";
+}
+<div class="admin-panel">
+    <p class="admin-panel-hint">一共 @Model.Items.TotalCount 条。压下去的留言前台不再显示，但内容还留着。</p>
+
+    @if (Model.Items.Items.Count > 0)
+    {
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr><th>来自</th><th>内容</th><th>记录</th><th>时间</th><th></th></tr>
+                </thead>
+                <tbody>
+                @foreach (var comment in Model.Items.Items)
+                {
+                    <tr>
+                        <td>
+                            <span class="title-cell">
+                                @comment.AuthorName
+                                @if (!comment.IsApproved)
+                                {
+                                    <span class="tag is-hidden">已压下</span>
+                                }
+                            </span>
+                        </td>
+                        <td style="max-width:360px">@comment.Content</td>
+                        <td>@(comment.Moment?.Title ?? "—")</td>
+                        <td>@Model.ToLocal(comment.CreatedAt).ToString("yyyy-MM-dd HH:mm")</td>
+                        <td class="is-actions">
+                            <form method="post" asp-page-handler="Toggle" style="display:inline">
+                                <input type="hidden" name="id" value="@comment.Id">
+                                <input type="hidden" name="approved" value="@((!comment.IsApproved).ToString().ToLowerInvariant())">
+                                <input type="hidden" name="page" value="@Model.Items.Page">
+                                <button class="btn btn-ghost btn-small" type="submit">@Icon(comment.IsApproved ? "eye-off" : "check")</button>
+                            </form>
+                            <form method="post" asp-page-handler="Delete" style="display:inline" data-confirm="删掉这条留言？">
+                                <input type="hidden" name="id" value="@comment.Id">
+                                <input type="hidden" name="page" value="@Model.Items.Page">
+                                <button class="btn btn-danger btn-small" type="submit">@Icon("trash-2")</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+
+        @if (Model.Items.TotalPages > 1)
+        {
+            <div class="admin-pagination">
+                @for (var number = 1; number <= Model.Items.TotalPages; number++)
+                {
+                    if (number == Model.Items.Page)
+                    {
+                        <span class="current">@number</span>
+                    }
+                    else
+                    {
+                        <a href="/admin/comments?page=@number">@number</a>
+                    }
+                }
+            </div>
+        }
+    }
+    else
+    {
+        <p class="admin-empty">还没有人留言。</p>
+    }
+</div>

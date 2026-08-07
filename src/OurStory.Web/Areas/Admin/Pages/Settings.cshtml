@@ -1,0 +1,115 @@
+@page "/admin/settings"
+@model OurStory.Web.Areas.Admin.Pages.SettingsModel
+@{
+    ViewData["ActiveMenu"] = "settings";
+    ViewData["Eyebrow"] = "SETTINGS";
+    ViewData["Title"] = "站点设置";
+
+    var colorModes = new[]
+    {
+        new SelectListItem("跟随系统", "auto"),
+        new SelectListItem("始终浅色", "light"),
+        new SelectListItem("始终深色", "dark")
+    };
+}
+<form method="post">
+    @if (!string.IsNullOrEmpty(Model.Error))
+    {
+        <p class="admin-error">@Icon("circle-alert")@Model.Error</p>
+    }
+
+    <div class="admin-panel">
+        <h2>@Icon("house")站点</h2>
+        <div class="field-grid">
+            <label class="field">
+                <span>站点名称</span>
+                <input asp-for="Input.SiteTitle" type="text" maxlength="60" required>
+            </label>
+            <label class="field">
+                <span>站点描述</span>
+                <input asp-for="Input.SiteDescription" type="text" maxlength="120">
+            </label>
+            <label class="field">
+                <span>默认配色</span>
+                <select asp-for="Input.ColorMode" asp-items="colorModes"></select>
+                <small>访客在页面右上角还能各自再切，切换结果记在他们自己的浏览器里。</small>
+            </label>
+            <label class="field">
+                <span>点点滴滴每页条数</span>
+                <input asp-for="Input.MomentsPageSize" type="number" min="1" max="100">
+            </label>
+        </div>
+    </div>
+
+    <div class="admin-panel">
+        <h2>@Icon("heart")两个人</h2>
+        <div class="field-grid">
+            <label class="field">
+                <span>男主名字</span>
+                <input asp-for="Input.BoyName" type="text" maxlength="32" required>
+            </label>
+            <label class="field">
+                <span>女主名字</span>
+                <input asp-for="Input.GirlName" type="text" maxlength="32" required>
+            </label>
+            <label class="field">
+                <span>男主头像地址</span>
+                <input asp-for="Input.BoyAvatar" type="text" maxlength="500" placeholder="留空显示文字头像">
+            </label>
+            <label class="field">
+                <span>女主头像地址</span>
+                <input asp-for="Input.GirlAvatar" type="text" maxlength="500" placeholder="留空显示文字头像">
+            </label>
+            <label class="field">
+                <span>男主个性短句</span>
+                <input asp-for="Input.BoySentence" type="text" maxlength="60">
+            </label>
+            <label class="field">
+                <span>女主个性短句</span>
+                <input asp-for="Input.GirlSentence" type="text" maxlength="60">
+            </label>
+            <label class="field">
+                <span>在一起的时间</span>
+                <input asp-for="Input.LoveStartedAt" type="datetime-local">
+            </label>
+            <label class="field">
+                <span>每天最多记多少次心动</span>
+                <input asp-for="Input.HeartbeatDailyLimit" type="number" min="1" max="9999">
+            </label>
+        </div>
+    </div>
+
+    <div class="admin-panel">
+        <h2>@Icon("quote")首页文案</h2>
+        <label class="field">
+            <span>首页介绍</span>
+            <textarea asp-for="Input.HomeSentence" rows="2" maxlength="200"></textarea>
+        </label>
+        <label class="field">
+            <span>今日恋爱小记</span>
+            <textarea asp-for="Input.DailyNote" rows="3" maxlength="400"></textarea>
+            <small>换行会原样保留。</small>
+        </label>
+        <label class="field" style="margin-bottom:0">
+            <span>随机情话</span>
+            <textarea asp-for="Input.LoveLetters" rows="8"></textarea>
+            <small>一行一句，每次打开首页随机显示一句。全部清空会退回主题自带的那一份。</small>
+        </label>
+    </div>
+
+    <div class="admin-panel">
+        <h2>@Icon("message-circle-heart")留言</h2>
+        <label class="field-check">
+            <input asp-for="Input.AllowGuestComments" type="checkbox">
+            <span>允许没有账号的人留言</span>
+        </label>
+        <label class="field-check">
+            <input asp-for="Input.CommentsRequireMail" type="checkbox">
+            <span>访客留言必须填邮箱</span>
+        </label>
+
+        <div class="form-actions">
+            <button class="btn" type="submit">@Icon("save")保存设置</button>
+        </div>
+    </div>
+</form>

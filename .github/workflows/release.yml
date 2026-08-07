@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号，例如 v1.0.0'
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  release:
+    name: 检查、打包并发布
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析并验证版本号
+        id: meta
+        env:
+          RAW_VERSION: ${{ github.event.inputs.version || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RAW_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "无效版本号：$RAW_VERSION" >&2
+            exit 1
+          fi
+          echo "version=$RAW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "number=${RAW_VERSION#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: 发布前跑一遍测试
+        run: dotnet test OurStory.sln -c Release
+
+      - name: 打包（需要目标机装 .NET 运行时）
+        env:
+          NUMBER: ${{ steps.meta.outputs.number }}
+        run: |
+          set -euxo pipefail
+          dotnet publish src/OurStory.Web/OurStory.Web.csproj \
+            -c Release -o dist/portable -p:Version="$NUMBER"
+
+      - name: 打包（自带运行时，Linux x64）
+        env:
+          NUMBER: ${{ steps.meta.outputs.number }}
+        run: |
+          set -euxo pipefail
+          dotnet publish src/OurStory.Web/OurStory.Web.csproj \
+            -c Release -r linux-x64 --self-contained true \
+            -o dist/linux-x64 -p:Version="$NUMBER"
+
+      - name: 压缩并校验
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euxo pipefail
+          mkdir -p dist/artifacts
+
+          for flavor in portable linux-x64; do
+            cp LICENSE "dist/${flavor}/"
+            (cd "dist/${flavor}" && zip -qr "../artifacts/CCOurStory-${VERSION}-${flavor}.zip" .)
+          done
+
+          unzip -l "dist/artifacts/CCOurStory-${VERSION}-portable.zip" | grep -q 'OurStory.Web.dll'
+          unzip -l "dist/artifacts/CCOurStory-${VERSION}-portable.zip" | grep -q 'wwwroot/assets/home.css'
+          unzip -l "dist/artifacts/CCOurStory-${VERSION}-linux-x64.zip" | grep -q 'OurStory.Web$'
+
+          (cd dist/artifacts && sha256sum ./*.zip > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - name: 发布 GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.version }}
+          name: ${{ steps.meta.outputs.version }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: dist/artifacts/*
+          body: |
+            ## 安装
+
+            **目标机已经装了 .NET 10 运行时**：下载 `CCOurStory-${{ steps.meta.outputs.version }}-portable.zip`，
+            解压到任意目录，运行 `dotnet OurStory.Web.dll`。
+
+            **目标机什么都没装**：下载 `CCOurStory-${{ steps.meta.outputs.version }}-linux-x64.zip`，
+            解压后 `chmod +x OurStory.Web && ./OurStory.Web` 即可。
+
+            两种包都会在自己目录下的 `App_Data/` 里建库。升级时直接覆盖文件，
+            **不要删掉 `App_Data/`** —— 数据库、附件和登录密钥都在里面。

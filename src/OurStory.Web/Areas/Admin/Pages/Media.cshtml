@@ -1,0 +1,57 @@
+@page "/admin/media"
+@model OurStory.Web.Areas.Admin.Pages.MediaModel
+@{
+    ViewData["ActiveMenu"] = "media";
+    ViewData["Eyebrow"] = "MEDIA";
+    ViewData["Title"] = "图片";
+}
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <p class="admin-error">@Icon("circle-alert")@Model.Error</p>
+}
+
+<div class="admin-panel">
+    <h2>@Icon("upload")上传</h2>
+    <p class="admin-panel-hint">当前存储：@Model.DriverName。写记录时也可以在编辑器右侧直接插图。</p>
+
+    <form method="post" enctype="multipart/form-data">
+        <label class="field">
+            <span>选一张图片</span>
+            <input type="file" name="file" accept="image/*" required>
+        </label>
+        <div class="form-actions">
+            <button class="btn" type="submit">@Icon("upload")上传</button>
+        </div>
+    </form>
+</div>
+
+<div class="admin-panel">
+    <h2>@Icon("image")最近上传</h2>
+
+    @if (!Model.IsLocal)
+    {
+        <p class="admin-empty">附件存在 OSS 上，这里不列清单，去 Bucket 里看就好。</p>
+    }
+    else if (Model.Items.Count == 0)
+    {
+        <p class="admin-empty">还没有上传过图片。</p>
+    }
+    else
+    {
+        <div class="media-grid">
+            @foreach (var item in Model.Items)
+            {
+                <figure class="media-item">
+                    <a href="@item.Url" target="_blank" rel="noopener"><img src="@item.Url" alt="@item.Name" loading="lazy"></a>
+                    <figcaption>
+                        <span class="media-name" title="@item.Name">@item.Name</span>
+                        <span class="media-foot">
+                            <span>@item.SizeText</span>
+                            <button class="media-copy" type="button" data-copy="@item.Url">@Icon("copy")<span>复制链接</span></button>
+                        </span>
+                    </figcaption>
+                </figure>
+            }
+        </div>
+    }
+</div>

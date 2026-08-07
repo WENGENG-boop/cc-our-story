@@ -1,0 +1,31 @@
+@inject AssetVersionProvider Assets
+@*
+    登录页：用后台那套样式，不加载前台主题的脚本。
+*@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#fffaf8" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#17151b" media="(prefers-color-scheme: dark)">
+    <title>@ViewData["Title"] · 后台</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="@Assets.Url("assets/variables.css")">
+    <link rel="stylesheet" href="@Assets.Url("assets/admin.css")">
+    <script>
+        (function () {
+            var mode = null;
+            try { mode = localStorage.getItem('cc-color-mode'); } catch (e) {}
+            if (mode !== 'light' && mode !== 'dark') {
+                mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.dataset.theme = mode;
+        }());
+    </script>
+</head>
+<body class="auth-page">
+@Sprite()
+@RenderBody()
+</body>
+</html>

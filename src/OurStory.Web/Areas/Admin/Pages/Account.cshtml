@@ -1,0 +1,64 @@
+@page "/admin/account"
+@model OurStory.Web.Areas.Admin.Pages.AccountModel
+@inject ISettingsService SettingsService
+@{
+    ViewData["ActiveMenu"] = "account";
+    ViewData["Eyebrow"] = "ACCOUNT";
+    ViewData["Title"] = "账号";
+
+    var site = await SettingsService.GetAsync();
+}
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <p class="admin-error">@Icon("circle-alert")@Model.Error</p>
+}
+
+<div class="admin-panel">
+    <h2>@Icon("users-round")站点里的两个人</h2>
+    <p class="admin-panel-hint">
+        权限模型只有这两个账号，其余所有访客都没有后台入口。
+        页面上的称呼跟着<a href="/admin/settings">站点设置</a>里的男主 / 女主名字走，改完全站立刻生效。
+    </p>
+
+    <div class="admin-table-wrap">
+        <table class="admin-table">
+            <thead>
+            <tr><th>登录名</th><th>身份</th><th>页面上的称呼</th><th>最近登录</th></tr>
+            </thead>
+            <tbody>
+            @foreach (var account in Model.Accounts)
+            {
+                <tr>
+                    <td>@account.UserName</td>
+                    <td><span class="tag">@(account.Role == UserRole.Boy ? "男主" : "女主")</span></td>
+                    <td>@site.RoleName(account.Role)</td>
+                    <td>@(account.LastLoginAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "还没登录过")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="admin-panel">
+    <h2>@Icon("key-round")改口令</h2>
+    <form method="post" asp-page-handler="Password">
+        <div class="field-grid">
+            <label class="field">
+                <span>当前口令</span>
+                <input asp-for="Password.CurrentPassword" type="password" autocomplete="current-password" required>
+            </label>
+            <label class="field">
+                <span>新口令</span>
+                <input asp-for="Password.NewPassword" type="password" autocomplete="new-password" minlength="8" required>
+            </label>
+            <label class="field">
+                <span>再输一次</span>
+                <input asp-for="Password.ConfirmPassword" type="password" autocomplete="new-password" minlength="8" required>
+            </label>
+        </div>
+        <div class="form-actions">
+            <button class="btn" type="submit">@Icon("key-round")换掉口令</button>
+        </div>
+    </form>
+</div>

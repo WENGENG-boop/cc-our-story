@@ -1,0 +1,15 @@
+@model AvatarModel
+@*
+    头像：填了地址就显示图片，留空时退回一个带称呼的文字头像，
+    页面上永远不会出现一个空框。
+*@
+<div class="avatar @Model.CssClass">
+    @if (!string.IsNullOrWhiteSpace(Model.Url))
+    {
+        <img src="@Model.Url" alt="头像" loading="lazy" decoding="async">
+    }
+    else
+    {
+        <span>@Model.Fallback</span>
+    }
+</div>

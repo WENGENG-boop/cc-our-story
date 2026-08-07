@@ -1,0 +1,99 @@
+/* ==========================================================================
+   CC Our Story — 主题样式
+   1. 设计变量  2. 基础元素  3. 图标  4. 导航  5. 首页
+   6. 列表与文章  7. 点点滴滴  8. 留言  9. 页脚与浮层  10. 响应式
+   ========================================================================== */
+
+/* 1. 设计变量 ------------------------------------------------------------ */
+:root {
+    --paper: #fffdfb;
+    --surface: #ffffff;
+    --surface-soft: #fffaf9;
+    --surface-muted: #f5edf1;
+    --ink: #302d37;
+    --muted: #7b7584;
+    --faint: #aaa0ab;
+    --line: rgba(68, 55, 79, .11);
+    --line-strong: rgba(68, 55, 79, .17);
+    --pink: #df728d;
+    --pink-dark: #bb526e;
+    --pink-soft: #f8e6eb;
+    --pink-softer: #fbecf0;
+    --footer-bg: #35313a;
+    --footer-ink: #ffffff;
+    --shadow-sm: 0 8px 24px rgba(76, 58, 84, .07);
+    --shadow-md: 0 18px 45px rgba(79, 58, 85, .13);
+    --shadow-lg: 0 30px 80px rgba(45, 33, 49, .24);
+    --hero-bg: radial-gradient(circle at 14% 42%, rgba(243, 185, 193, .28), transparent 25%), radial-gradient(circle at 86% 22%, rgba(188, 172, 226, .3), transparent 27%), linear-gradient(145deg, #fffaf8, #f8f3fb 55%, #fff9f5);
+    --nav-bg: rgba(255, 255, 255, .72);
+    --scrim: rgba(40, 34, 43, .35);
+    --card-peach: #fae9e0;
+    --card-mint: #e7f2ec;
+    --card-blue: #e9eff8;
+    --card-rose: #f8e6eb;
+    --card-lilac: #eee9f7;
+    --card-gold: #f6efdb;
+    --card-ring: rgba(255, 255, 255, .6);
+    --card-chip: rgba(255, 255, 255, .72);
+    --scrollbar-track: #f6f0f2;
+    --scrollbar-thumb: #b7abb4;
+    --scrollbar-thumb-hover: #9d8f99;
+    --serif: Georgia, "Songti SC", "Source Han Serif SC", serif;
+    --sans: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", Arial, sans-serif;
+}
+
+:root[data-theme="dark"] {
+    --paper: #17151b;
+    --surface: #221f29;
+    --surface-soft: #1e1b24;
+    --surface-muted: #2a2632;
+    --ink: #eae6f0;
+    --muted: #a49cae;
+    --faint: #7d7488;
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .16);
+    --pink: #ef91a8;
+    --pink-dark: #f0a3b6;
+    --pink-soft: #3a2630;
+    --pink-softer: #33222b;
+    --footer-bg: #100e14;
+    --footer-ink: #ece8f0;
+    --shadow-sm: 0 8px 24px rgba(0, 0, 0, .3);
+    --shadow-md: 0 18px 45px rgba(0, 0, 0, .42);
+    --shadow-lg: 0 30px 80px rgba(0, 0, 0, .6);
+    --hero-bg: radial-gradient(circle at 14% 42%, rgba(196, 96, 124, .2), transparent 28%), radial-gradient(circle at 86% 22%, rgba(120, 100, 178, .22), transparent 30%), linear-gradient(145deg, #191720, #1d1a24 55%, #171419);
+    --nav-bg: rgba(30, 27, 36, .74);
+    --scrim: rgba(8, 6, 11, .6);
+    --card-peach: #382b25;
+    --card-mint: #21302a;
+    --card-blue: #232a37;
+    --card-rose: #382531;
+    --card-lilac: #2b2639;
+    --card-gold: #35301f;
+    --card-ring: rgba(255, 255, 255, .07);
+    --card-chip: rgba(255, 255, 255, .07);
+    --scrollbar-track: #17151b;
+    --scrollbar-thumb: #6f6976;
+    --scrollbar-thumb-hover: #918997;
+}
+
+/* 全站滚动条：视口和后台独立滚动区域使用同一套外观。 */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar { width: 10px; height: 10px }
+*::-webkit-scrollbar-track { background: var(--scrollbar-track) }
+
+*::-webkit-scrollbar-thumb {
+    min-height: 42px;
+    border: 2px solid var(--scrollbar-track);
+    border-radius: 999px;
+    background: var(--scrollbar-thumb);
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover) }
+*::-webkit-scrollbar-corner { background: var(--scrollbar-track) }
+*::-webkit-scrollbar-button { display: none; width: 0; height: 0 }

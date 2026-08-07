@@ -1,0 +1,103 @@
+@page "/admin/moments/edit/{id:int?}"
+@model OurStory.Web.Areas.Admin.Pages.Moments.EditModel
+@{
+    ViewData["ActiveMenu"] = "moments";
+    ViewData["Eyebrow"] = Model.IsNew ? "NEW MOMENT" : "EDIT MOMENT";
+    ViewData["Title"] = Model.IsNew ? "写一条记录" : "编辑记录";
+}
+<form method="post">
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <p class="admin-error">@Icon("circle-alert")@Html.Raw(string.Join("；", ViewData.ModelState.Values.SelectMany(state => state.Errors).Select(error => error.ErrorMessage)))</p>
+    }
+
+    <div class="editor-layout">
+        <div class="editor-body">
+            <div class="admin-panel">
+                <label class="field">
+                    <span>标题</span>
+                    <input asp-for="Input.Title" type="text" maxlength="180" required autofocus>
+                </label>
+
+                <label class="field" style="margin-bottom:0">
+                    <span>正文（Markdown）</span>
+                    <textarea asp-for="Input.Content" data-editor rows="24"></textarea>
+                    <small>支持 Markdown 与表格、任务列表等常用扩展；单个换行就是换行。</small>
+                </label>
+            </div>
+        </div>
+
+        <div class="editor-side">
+            <div class="admin-panel">
+                <h2>@Icon("save")发布</h2>
+
+                <label class="field">
+                    <span>状态</span>
+                    <select asp-for="Input.Status" asp-items="Html.GetEnumSelectList<MomentStatus>()"></select>
+                </label>
+
+                <label class="field">
+                    <span>发生日期</span>
+                    <input asp-for="Input.MomentDate" type="datetime-local">
+                    <small>可以补记很久以前的事，时间轴按它排。</small>
+                </label>
+
+                <label class="field-check">
+                    <input asp-for="Input.AllowComment" type="checkbox">
+                    <span>允许留言</span>
+                </label>
+
+                <div class="form-actions">
+                    <button class="btn" type="submit">@Icon("save")保存</button>
+                    @if (!Model.IsNew && Model.Slug is not null)
+                    {
+                        <a class="btn btn-ghost" href="/moments/@Model.Slug" target="_blank" rel="noopener">@Icon("eye")预览</a>
+                    }
+                </div>
+            </div>
+
+            <div class="admin-panel">
+                <h2>@Icon("image")插图</h2>
+                <label class="upload-drop">
+                    @Icon("upload")<span>选一张图片，直接插进正文</span>
+                    <input type="file" accept="image/*" data-upload-input>
+                </label>
+                <small style="display:block;margin-top:9px;color:var(--faint)" data-upload-status></small>
+
+                <label class="field" style="margin-top:16px;margin-bottom:0">
+                    <span>封面图</span>
+                    <input asp-for="Input.CoverUrl" type="text" maxlength="500" placeholder="留空时自动取正文里的第一张图">
+                </label>
+            </div>
+
+            <div class="admin-panel">
+                <h2>@Icon("tag")这一刻</h2>
+
+                <label class="field">
+                    <span>心情</span>
+                    <input asp-for="Input.Mood" type="text" maxlength="32" placeholder="开心 / 想念 / 被治愈">
+                </label>
+
+                <label class="field">
+                    <span>地点</span>
+                    <input asp-for="Input.Location" type="text" maxlength="120" placeholder="北京 · 颐和园">
+                </label>
+
+                <label class="field">
+                    <span>摘要</span>
+                    <textarea asp-for="Input.Summary" rows="3" maxlength="400" placeholder="留空时自动从正文截取"></textarea>
+                </label>
+
+                <label class="field">
+                    <span>地址短名</span>
+                    <input asp-for="Input.Slug" type="text" maxlength="80" placeholder="留空时自动生成">
+                </label>
+
+                <label class="field" style="margin-bottom:0">
+                    <span>访问密码</span>
+                    <input asp-for="Input.Password" type="text" maxlength="128" placeholder="不为空即上锁">
+                </label>
+            </div>
+        </div>
+    </div>
+</form>

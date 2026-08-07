@@ -1,0 +1,29 @@
+@model CommentItemModel
+@{
+    var comment = Model.Comment;
+}
+<li id="comment-@comment.Id" class="comment-body">
+    <div class="comment-author">
+        @if (!string.IsNullOrWhiteSpace(comment.AuthorUrl))
+        {
+            <cite class="fn"><a href="@comment.AuthorUrl" rel="nofollow noopener" target="_blank">@comment.AuthorName</a></cite>
+        }
+        else
+        {
+            <cite class="fn">@comment.AuthorName</cite>
+        }
+    </div>
+    <div class="comment-meta"><a href="#comment-@comment.Id">@comment.CreatedAt.ToString("yyyy-MM-dd HH:mm")</a></div>
+    <div class="comment-content">@Html.Raw(comment.ContentHtml)</div>
+    <div class="comment-reply"><a href="@($"/moments/{Model.Slug}?replyTo={comment.Id}#respond")">回复</a></div>
+
+    @if (comment.Replies.Count > 0)
+    {
+        <ol class="comment-children">
+            @foreach (var reply in comment.Replies)
+            {
+                <partial name="_CommentItem" model="@(new CommentItemModel(reply, Model.Slug))" />
+            }
+        </ol>
+    }
+</li>

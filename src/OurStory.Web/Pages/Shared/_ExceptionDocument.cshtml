@@ -1,0 +1,56 @@
+@model ExceptionDocumentModel
+@{
+    Layout = null;
+}
+@*
+    一个完全独立的提示页：不依赖主题的 css/js，样式全部内联。
+    密码错误时前端会把它当作 fetch 的回执解析，靠 [data-exception-message] 取出提示语。
+*@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#fffaf8" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#17151b" media="(prefers-color-scheme: dark)">
+    <title>@Model.Title</title>
+    <script>
+        (function () {
+            var mode = null;
+            try { mode = localStorage.getItem('cc-color-mode'); } catch (e) {}
+            if (mode !== 'light' && mode !== 'dark') {
+                mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.dataset.theme = mode;
+        }());
+    </script>
+    <style>
+        :root{--ink:#302d37;--muted:#817984;--paper:#fffdfb;--pink-dark:#bb526e;--pink-soft:#f8e6eb;--line:rgba(68,55,79,.17);--scrim:rgba(40,34,43,.22);--bg:radial-gradient(circle at 14% 42%,rgba(243,185,193,.3),transparent 30%),radial-gradient(circle at 86% 22%,rgba(188,172,226,.32),transparent 30%),#fffaf8}
+        :root[data-theme="dark"]{--ink:#eae6f0;--muted:#a49cae;--paper:#221f29;--pink-dark:#f0a3b6;--pink-soft:#3a2630;--line:rgba(255,255,255,.16);--scrim:rgba(8,6,11,.5);--bg:radial-gradient(circle at 14% 42%,rgba(196,96,124,.22),transparent 32%),radial-gradient(circle at 86% 22%,rgba(120,100,178,.24),transparent 32%),#17151b}
+        *{box-sizing:border-box}html,body{min-height:100%;margin:0}
+        body{display:grid;place-items:center;padding:20px;background:var(--bg);color:var(--ink);font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif}
+        .icon{width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+        .exception-backdrop{position:fixed;inset:0;background:var(--scrim);backdrop-filter:blur(8px)}
+        .exception-card{position:relative;z-index:1;width:min(420px,100%);padding:42px 38px 36px;border-radius:28px;background:var(--paper);text-align:center;box-shadow:0 30px 80px rgba(45,33,49,.24)}
+        .exception-icon{display:grid;place-items:center;width:58px;height:58px;margin:auto;border-radius:19px;background:var(--pink-soft);color:var(--pink-dark);font-size:26px}
+        .exception-icon .icon{stroke-width:1.6}
+        .exception-eyebrow{margin:21px 0 8px;color:var(--pink-dark);font:700 8px Arial;letter-spacing:.25em}
+        .exception-card h1{margin:0 0 13px;font:400 29px Georgia,"Songti SC",serif}
+        .exception-message{margin:0;color:var(--muted);font-size:12px;line-height:1.8}
+        .exception-action{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:47px;margin-top:25px;border:0;border-radius:14px;background:var(--ink);color:var(--paper);font:14px inherit;cursor:pointer;transition:background-color .2s}
+        .exception-action:hover{background:var(--pink-dark);color:#fff}
+        @@media(max-width:520px){.exception-card{padding:38px 24px 28px}}
+        @@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+    </style>
+</head>
+<body>
+<div class="exception-backdrop" aria-hidden="true"></div>
+<main class="exception-card" role="alertdialog" aria-modal="true" aria-labelledby="exception-title">
+    <span class="exception-icon">@Inline(Model.IconName)</span>
+    <p class="exception-eyebrow">OUR STORY · @Model.Code</p>
+    <h1 id="exception-title">@Model.Title</h1>
+    <p class="exception-message" data-exception-message>@Model.Message</p>
+    <button class="exception-action" type="button" onclick="if(history.length > 1){history.back()}else{location.href='/'}">@Inline("arrow-left")返回上一页</button>
+</main>
+</body>
+</html>

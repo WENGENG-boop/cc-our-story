@@ -1,0 +1,78 @@
+@page "/admin/moments"
+@model OurStory.Web.Areas.Admin.Pages.Moments.IndexModel
+@inject ISettingsService SettingsService
+@{
+	ViewData["ActiveMenu"] = "moments";
+	ViewData["Eyebrow"] = "MOMENTS";
+	ViewData["Title"] = "点点滴滴";
+
+	var site = await SettingsService.GetAsync();
+}
+<div class="admin-panel">
+	<div class="admin-toolbar">
+		<p class="admin-panel-hint" style="margin:0">一共 @Model.Items.TotalCount 条记录。</p>
+		<a class="btn" href="/admin/moments/edit">@Icon("plus")写一条</a>
+	</div>
+
+	@if (Model.Items.Items.Count > 0)
+	{
+		<div class="admin-moment-list">
+			@foreach (var moment in Model.Items.Items)
+			{
+				<article class="admin-moment-item">
+					<div class="admin-moment-summary">
+						<div class="admin-moment-title">
+							<a href="/admin/moments/edit/@moment.Id">@moment.Title</a>
+							@if (moment.IsProtected)
+							{
+								<span class="tag is-locked">@Icon("lock")上锁</span>
+							}
+						</div>
+						<div class="admin-moment-meta">
+							<span>@Icon("calendar-days")@Model.ToLocal(moment.MomentDate).ToString("yyyy-MM-dd")</span>
+							<span>@Icon("user-round")@(moment.Author is null ? "—" : site.RoleName(moment.Author.Role))</span>
+							@if (moment.Status == MomentStatus.Draft)
+							{
+								<span class="tag is-draft">草稿</span>
+							}
+							else
+							{
+								<span class="tag">已发布</span>
+							}
+						</div>
+					</div>
+					<div class="admin-moment-actions" aria-label="@moment.Title 的操作">
+						<a class="btn btn-ghost btn-small" href="/moments/@moment.Slug" target="_blank" rel="noopener" title="查看文章">@Icon("eye")<span>查看</span></a>
+						<a class="btn btn-ghost btn-small" href="/admin/moments/edit/@moment.Id" title="编辑文章">@Icon("pen-line")<span>编辑</span></a>
+						<form method="post" asp-page-handler="Delete" data-confirm="删掉「@moment.Title」？留言也会一起没掉。">
+							<input type="hidden" name="id" value="@moment.Id">
+							<input type="hidden" name="page" value="@Model.Items.Page">
+							<button class="btn btn-danger btn-small" type="submit" title="删除文章">@Icon("trash-2")<span>删除</span></button>
+						</form>
+					</div>
+				</article>
+			}
+		</div>
+
+		@if (Model.Items.TotalPages > 1)
+		{
+			<div class="admin-pagination">
+				@for (var number = 1; number <= Model.Items.TotalPages; number++)
+				{
+					if (number == Model.Items.Page)
+					{
+						<span class="current">@number</span>
+					}
+					else
+					{
+						<a href="/admin/moments?page=@number">@number</a>
+					}
+				}
+			</div>
+		}
+	}
+	else
+	{
+		<p class="admin-empty">还没有任何记录。</p>
+	}
+</div>

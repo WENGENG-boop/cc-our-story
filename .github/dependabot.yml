@@ -1,0 +1,31 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - github-actions
+
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - docker
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - nuget
+    groups:
+      # 微软那一大票包版本是绑在一起的，分开升会互相打架
+      microsoft:
+        patterns:
+          - "Microsoft.*"
+          - "System.*"

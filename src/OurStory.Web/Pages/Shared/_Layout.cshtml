@@ -1,0 +1,94 @@
+@inject ISettingsService SettingsService
+@inject AssetVersionProvider Assets
+@{
+    var site = await SettingsService.GetAsync();
+    var activeNav = ViewData["ActiveNav"] as string ?? string.Empty;
+    // 首页和其它页面的样式 / 脚本不一样，和原主题的资源清单保持一致
+    var bundle = ViewData["Bundle"] as string ?? "moments";
+    var styles = new[] { "assets/variables.css", "assets/core.css", $"assets/{bundle}.css" };
+    var scripts = new[] { "assets/core.js", $"assets/{bundle}.js" };
+    var pageTitle = ViewData["Title"] as string;
+}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#fffaf8" media="(prefers-color-scheme: light)" data-theme-color="light">
+    <meta name="theme-color" content="#17151b" media="(prefers-color-scheme: dark)" data-theme-color="dark">
+    <meta name="format-detection" content="telephone=no">
+    <title>@(string.IsNullOrWhiteSpace(pageTitle) ? site.SiteTitle : pageTitle + " - " + site.SiteTitle)</title>
+    <link rel="icon" href="/favicon.ico">
+    @foreach (var style in styles)
+    {
+        <link rel="stylesheet" href="@Assets.Url(style)">
+    }
+    <script>
+        // 在首屏绘制之前定好配色，避免深色模式下闪一下白屏。
+        // data-theme-mode 记的是选择（auto/light/dark），data-theme 记的是最终生效的那套配色
+        (function () {
+            var fallback = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(site.ColorMode));
+            var saved = null;
+            try { saved = localStorage.getItem('cc-color-mode'); } catch (e) {}
+            var mode = saved || fallback;
+            if (mode !== 'light' && mode !== 'dark') {
+                mode = 'auto';
+            }
+            var root = document.documentElement;
+            root.dataset.themeMode = mode;
+            root.dataset.theme = mode === 'auto'
+                ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                : mode;
+        }());
+    </script>
+</head>
+<body>
+@Sprite()
+<a class="skip-link" href="#main">跳到主要内容</a>
+<header class="site-nav" id="site-nav">
+    <div class="nav-inner">
+        <a class="logo" href="/" aria-label="回到首页"><span>CC</span> Our Story</a>
+        <nav aria-label="站内导航">
+            <a href="/"@(activeNav == "home" ? Html.Raw(" class=\"active\" aria-current=\"page\"") : null)>@Icon("house")<span>首页</span></a>
+            <a href="/moments"@(activeNav == "moments" ? Html.Raw(" class=\"active\" aria-current=\"page\"") : null)>@Icon("camera")<span>点点滴滴</span></a>
+        </nav>
+        <div class="nav-actions">
+            <button class="theme-toggle" type="button" aria-label="配色：跟随系统" title="配色：跟随系统">@Icon("sun-moon", "icon-auto")@Icon("sun", "icon-sun")@Icon("moon-star", "icon-moon")</button>
+            <a class="admin-link" href="/admin" aria-label="进入后台" title="进入后台">@Icon("layout-dashboard")<span>管理</span></a>
+        </div>
+    </div>
+</header>
+
+@RenderBody()
+
+<footer class="site-footer">
+    <a class="logo" href="/"><span>CC</span> Our Story</a>
+    <p>Made with @Icon("heart", "footer-heart", "爱") for the two of us.</p>
+    <span>© @DateTime.Now.Year OUR LITTLE WORLD</span>
+</footer>
+
+<button class="to-top" type="button" aria-label="回到顶部" title="回到顶部" hidden>@Icon("arrow-up")</button>
+
+<div class="feature-modal" id="feature-modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <button class="modal-close" type="button" aria-label="关闭">@Icon("x")</button>
+        <span class="modal-heart"><svg class="icon" id="modal-icon" aria-hidden="true"><use href="#i-heart"></use></svg></span>
+        <p id="modal-eyebrow">UI PREVIEW</p>
+        <h2 id="modal-title">功能预览</h2>
+        <span id="modal-message">这个入口会在后续功能中逐步开放</span>
+        <button class="modal-okay" type="button">知道啦</button>
+    </div>
+</div>
+
+<div class="lightbox" id="lightbox" hidden>
+    <button class="lightbox-close" type="button" aria-label="关闭">@Icon("x")</button>
+    <img alt="">
+</div>
+
+@foreach (var script in scripts)
+{
+    <script src="@Assets.Url(script)" defer></script>
+}
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

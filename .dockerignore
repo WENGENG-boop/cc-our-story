@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+**/App_Data/
+**/.vs/
+**/.vscode/
+.git/
+.github/
+.config/
+tests/
+docs/
+release/
+dist/
+*.user
+.env
+README.md
+screenshot.png

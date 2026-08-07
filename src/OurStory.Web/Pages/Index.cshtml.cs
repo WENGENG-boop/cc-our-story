@@ -1,0 +1,83 @@
+// Copyright (c) 2026 Keeleycenc.
+// Licensed under the MIT License.
+// See LICENSE file in the project root for full license information.
+
+using Microsoft.AspNetCore.Mvc.RazorPages;
+using OurStory.Core.Models;
+using OurStory.Services.Heartbeats;
+using OurStory.Services.Moments;
+using OurStory.Services.Settings;
+using OurStory.Web.Infrastructure;
+using System.Security.Cryptography;
+
+namespace OurStory.Web.Pages;
+
+/// <summary>
+/// 表示 IndexModel
+/// </summary>
+public class IndexModel(
+    ISettingsService settingsService,
+    IMomentService moments,
+    IHeartbeatService heartbeats,
+    VisitorIdentityAccessor visitors,
+    HeartbeatTokenService tokens,
+    MomentUnlockStore unlockStore) : PageModel {
+    /// <summary>
+    /// 执行 Site 操作
+    /// </summary>
+    public SiteSettings Site { get; private set; } = new();
+
+    /// <summary>
+    /// 获取或设置 LatestMoments
+    /// </summary>
+    public IReadOnlyList<MomentCard> LatestMoments { get; private set; } = [];
+
+    /// <summary>
+    /// 获取或设置 MomentsCount
+    /// </summary>
+    public int MomentsCount { get; private set; }
+
+    /// <summary>
+    /// 执行 Heartbeat 操作
+    /// </summary>
+    public HeartbeatSummary Heartbeat { get; private set; } = new();
+
+    /// <summary>
+    /// 获取或设置 HeartbeatToken
+    /// </summary>
+    public string HeartbeatToken { get; private set; } = string.Empty;
+
+    /// <summary>每次打开首页随机挑一句。</summary>
+    public string LoveLetter { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// 获取 IsGuest
+    /// </summary>
+    public bool IsGuest => Heartbeat.Role == "guest";
+
+    /// <summary>
+    /// 处理 GET 请求
+    /// </summary>
+    public async Task OnGetAsync(CancellationToken cancellationToken) {
+        Site = await settingsService.GetAsync(cancellationToken);
+
+        var viewer = new MomentViewer(User.IsOwner(), unlockStore.UnlockedIds());
+        LatestMoments = await moments.GetLatestAsync(3, viewer, cancellationToken);
+        MomentsCount = await moments.CountPublishedAsync(cancellationToken);
+
+        var who = await visitors.GetAsync(cancellationToken);
+        Heartbeat = await heartbeats.GetSummaryAsync(who, cancellationToken);
+        HeartbeatToken = tokens.Issue(who);
+
+        LoveLetter = Site.LoveLetters.Count == 0
+            ? string.Empty
+            : Site.LoveLetters[RandomNumberGenerator.GetInt32(Site.LoveLetters.Count)];
+    }
+
+    /// <summary>页面上这个身份的称呼。</summary>
+    public string RoleName() => Heartbeat.Role switch {
+        "boy" => Site.BoyName,
+        "girl" => Site.GirlName,
+        _ => "路过的朋友"
+    };
+}

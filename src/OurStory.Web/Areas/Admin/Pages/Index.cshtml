@@ -1,0 +1,89 @@
+@page "/admin"
+@model OurStory.Web.Areas.Admin.Pages.IndexModel
+@{
+    ViewData["ActiveMenu"] = "dashboard";
+    ViewData["Eyebrow"] = "DASHBOARD";
+    ViewData["Title"] = "总览";
+}
+<div class="stat-grid">
+    <div class="stat-card">
+        <span>@Icon("heart")相恋</span>
+        <strong>@(Model.LoveDays > 0 ? $"第 {Model.LoveDays} 天" : "还没设置")</strong>
+    </div>
+    <div class="stat-card">
+        <span>@Icon("camera")点点滴滴</span>
+        <strong>@Model.PublishedCount<span style="font-size:12px;color:var(--faint)"> / @Model.TotalCount</span></strong>
+    </div>
+    <div class="stat-card">
+        <span>@Icon("message-circle-heart")留言</span>
+        <strong>@Model.CommentCount</strong>
+    </div>
+    <div class="stat-card">
+        <span>@Icon("sparkles")心动</span>
+        <strong>@(Model.Heartbeat.Totals.GetValueOrDefault("boy") + Model.Heartbeat.Totals.GetValueOrDefault("girl"))</strong>
+    </div>
+</div>
+
+<div class="admin-panel">
+    <h2>@Icon("heart")彼此心动的瞬间</h2>
+    <div class="stat-grid" style="margin-bottom:0">
+        <div class="stat-card">
+            <span>@Icon("user-round")@Model.Site.BoyName</span>
+            <strong>@Model.Heartbeat.Totals.GetValueOrDefault("boy")</strong>
+        </div>
+        <div class="stat-card">
+            <span>@Icon("user-round")@Model.Site.GirlName</span>
+            <strong>@Model.Heartbeat.Totals.GetValueOrDefault("girl")</strong>
+        </div>
+        <div class="stat-card">
+            <span>@Icon("sparkles")路过的祝福</span>
+            <strong>@Model.Heartbeat.Totals.GetValueOrDefault("guest")</strong>
+        </div>
+    </div>
+</div>
+
+<div class="admin-panel">
+    <div class="admin-toolbar">
+        <h2 style="margin:0">@Icon("camera")最近的记录</h2>
+        <a class="btn btn-small" href="/admin/moments/edit">@Icon("plus")写一条</a>
+    </div>
+
+    @if (Model.Recent.Count > 0)
+    {
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead>
+                <tr><th>标题</th><th>日期</th><th>状态</th><th></th></tr>
+                </thead>
+                <tbody>
+                @foreach (var moment in Model.Recent)
+                {
+                    <tr>
+                        <td><a href="/admin/moments/edit/@moment.Id">@moment.Title</a></td>
+                        <td>@Model.ToLocal(moment.MomentDate).ToString("yyyy-MM-dd")</td>
+                        <td>
+                            @if (moment.Status == MomentStatus.Draft)
+                            {
+                                <span class="tag is-draft">草稿</span>
+                            }
+                            else
+                            {
+                                <span class="tag">已发布</span>
+                            }
+                            @if (moment.IsProtected)
+                            {
+                                <span class="tag is-locked">@Icon("lock")上锁</span>
+                            }
+                        </td>
+                        <td class="is-actions"><a class="btn btn-ghost btn-small" href="/moments/@moment.Slug" target="_blank" rel="noopener">@Icon("eye")看看</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <p class="admin-empty">还没有任何记录，从写下第一条开始吧。</p>
+    }
+</div>
