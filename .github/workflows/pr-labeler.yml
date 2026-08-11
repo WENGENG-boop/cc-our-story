@@ -1,0 +1,199 @@
+name: PR Labeler
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: pr-labeler-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    name: 自动打标签
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+
+            // gitmoji 有的带变体选择符（♻️ = ♻ + U+FE0F），有的不带，统一去掉再比
+            const norm = (s) => (s || '').replace(/[\uFE0F\uFE0E]/g, '');
+            const title = norm(pr.title);
+            const branch = pr.head.ref;
+            const body = pr.body || '';
+
+            // ── 标题 gitmoji → 标签 ──────────────────────────────────────
+            const emojiRules = [
+              { emojis: ['✨'], label: 'enhancement' },
+              { emojis: ['🐛', '🚑', '🩹'], label: 'bug' },
+              { emojis: ['♻', '🚚', '🔥'], label: 'refactor' },
+              { emojis: ['⚡'], label: 'performance' },
+              { emojis: ['📝', '✏', '💡'], label: 'documentation' },
+              { emojis: ['👷', '💚'], label: 'ci' },
+              { emojis: ['✅', '🧪'], label: 'tests' },
+              { emojis: ['🔒', '🔐'], label: 'security' },
+              { emojis: ['⬆', '⬇', '📌', '➕', '➖'], label: 'dependencies' },
+              { emojis: ['🎨', '💄'], label: 'style' },
+              // 下面几个是补充的常用 gitmoji
+              { emojis: ['💥'], label: 'breaking-change' },
+              { emojis: ['🔧', '🔨', '🙈', '🗑'], label: 'chore' },
+              { emojis: ['⏪'], label: 'revert' },
+              { emojis: ['🐳', '🐋'], label: 'docker' },
+              { emojis: ['🔖'], label: 'release' },
+            ];
+
+            // ── 分支名前缀兜底（标题没带 emoji 时也能打上类型标签）──────────
+            const branchRules = [
+              { pattern: /^(feature|feat)\//i, label: 'enhancement' },
+              { pattern: /^(fix|bugfix|hotfix)\//i, label: 'bug' },
+              { pattern: /^refactor\//i, label: 'refactor' },
+              { pattern: /^docs?\//i, label: 'documentation' },
+              { pattern: /^(perf|performance)\//i, label: 'performance' },
+              { pattern: /^(test|tests)\//i, label: 'tests' },
+              { pattern: /^(chore|build)\//i, label: 'chore' },
+              { pattern: /^(ci|workflow)\//i, label: 'ci' },
+              { pattern: /^(security|sec)\//i, label: 'security' },
+              { pattern: /^(deps|dependabot)\//i, label: 'dependencies' },
+            ];
+
+            // ── 改动路径 → 模块标签 ─────────────────────────────────────
+            const pathRules = [
+              { pattern: /^src\/OurStory\.Web\/(?!wwwroot\/)/, label: 'area: web' },
+              { pattern: /^src\/OurStory\.Data\//, label: 'area: data' },
+              { pattern: /^src\/OurStory\.Services\//, label: 'area: services' },
+              { pattern: /^src\/OurStory\.Core\//, label: 'area: core' },
+              { pattern: /^src\/OurStory\.Web\/wwwroot\//, label: 'area: frontend' },
+              { pattern: /^tests\//, label: 'tests' },
+              { pattern: /^(docker\/|compose\.yaml$|\.dockerignore$)/, label: 'docker' },
+              { pattern: /^\.github\/workflows\//, label: 'ci' },
+              { pattern: /^\.github\/dependabot\.yml$/, label: 'dependencies' },
+              { pattern: /\.(md|mdx)$|^LICENSE$/, label: 'documentation' },
+              { pattern: /\.(csproj|sln|props|targets)$|^global\.json$|^NuGet\.Config$|^\.config\/dotnet-tools\.json$/, label: 'dependencies' },
+            ];
+
+            // ── 改动量 → size 标签 ──────────────────────────────────────
+            const sizeRules = [
+              { max: 10, label: 'size/XS' },
+              { max: 50, label: 'size/S' },
+              { max: 250, label: 'size/M' },
+              { max: 1000, label: 'size/L' },
+              { max: Infinity, label: 'size/XL' },
+            ];
+
+            // 标签的颜色和说明，缺了就自动建，省得一个个手点
+            const labelMeta = {
+              'enhancement':      { color: 'a2eeef', description: '新功能' },
+              'bug':              { color: 'd73a4a', description: '缺陷修复' },
+              'refactor':         { color: 'cfd3d7', description: '重构 / 搬代码 / 删代码' },
+              'performance':      { color: '5319e7', description: '性能优化' },
+              'documentation':    { color: '0075ca', description: '文档改动' },
+              'ci':               { color: 'ededed', description: 'CI / 工作流' },
+              'tests':            { color: 'c5def5', description: '测试相关' },
+              'security':         { color: 'b60205', description: '安全相关' },
+              'dependencies':     { color: '0366d6', description: '依赖升级' },
+              'style':            { color: 'fef2c0', description: '样式 / 排版，不影响逻辑' },
+              'breaking-change':  { color: 'b60205', description: '破坏性变更' },
+              'chore':            { color: 'fef2c0', description: '杂项维护' },
+              'revert':           { color: 'e4e669', description: '回滚改动' },
+              'docker':           { color: '1d76db', description: 'Docker / 镜像' },
+              'release':          { color: '0e8a16', description: '发版相关' },
+              'github-actions':   { color: '000000', description: 'GitHub Actions' },
+              'nuget':            { color: '004880', description: 'NuGet 包' },
+              'work in progress': { color: 'fbca04', description: '还没写完，先别合' },
+              'area: web':        { color: 'd4c5f9', description: 'OurStory.Web' },
+              'area: data':       { color: 'd4c5f9', description: 'OurStory.Data / 迁移' },
+              'area: services':   { color: 'd4c5f9', description: 'OurStory.Services' },
+              'area: core':       { color: 'd4c5f9', description: 'OurStory.Core' },
+              'area: frontend':   { color: 'd4c5f9', description: 'wwwroot 前端资源' },
+              'size/XS':          { color: '3cbf00', description: '改动 < 10 行' },
+              'size/S':           { color: '5d9801', description: '改动 < 50 行' },
+              'size/M':           { color: '7f7203', description: '改动 < 250 行' },
+              'size/L':           { color: 'a14c05', description: '改动 < 1000 行' },
+              'size/XL':          { color: 'c32607', description: '改动 >= 1000 行' },
+            };
+
+            const wanted = new Set();
+
+            for (const rule of emojiRules) {
+              if (rule.emojis.some((e) => title.includes(norm(e)))) wanted.add(rule.label);
+            }
+            for (const rule of branchRules) {
+              if (rule.pattern.test(branch)) wanted.add(rule.label);
+            }
+
+            // 改动文件（超过 300 个就不看了，那种 PR 路径标签也没意义）
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: pr.number, per_page: 100,
+            });
+            if (files.length <= 300) {
+              for (const file of files) {
+                for (const rule of pathRules) {
+                  if (rule.pattern.test(file.filename)) wanted.add(rule.label);
+                }
+              }
+            }
+
+            // 依赖类改动顺手标出生态
+            if (files.some((f) => /^\.github\/workflows\/|^\.github\/dependabot\.yml$/.test(f.filename))) {
+              if (wanted.has('dependencies')) wanted.add('github-actions');
+            }
+            if (files.some((f) => /\.csproj$|^Directory\.Build\.props$|^NuGet\.Config$/.test(f.filename))) {
+              if (wanted.has('dependencies')) wanted.add('nuget');
+            }
+
+            // size：只统计源码，锁文件和生成物不算
+            const churn = files
+              .filter((f) => !/(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|\.min\.(js|css)|\.svg|\.png|\.ico)$/.test(f.filename))
+              .reduce((sum, f) => sum + f.additions + f.deletions, 0);
+            wanted.add(sizeRules.find((r) => churn < r.max).label);
+
+            // 破坏性变更：约定式提交的 `!:` 和正文里的 BREAKING CHANGE 也认
+            if (/!:/.test(title) || /BREAKING[ -]CHANGE/i.test(body)) wanted.add('breaking-change');
+
+            // 草稿或标题带 WIP
+            if (pr.draft || /\b(wip|draft)\b/i.test(title) || /^\[wip\]/i.test(title)) {
+              wanted.add('work in progress');
+            }
+
+            // 只动自己管的这批标签，人工加的（比如 help wanted）不碰
+            const managed = new Set(Object.keys(labelMeta));
+            const current = new Set(pr.labels.map((l) => l.name));
+            const toAdd = [...wanted].filter((l) => !current.has(l));
+            const toRemove = [...current].filter((l) => managed.has(l) && !wanted.has(l));
+
+            for (const name of toAdd) {
+              const meta = labelMeta[name];
+              try {
+                await github.rest.issues.createLabel({
+                  owner, repo, name, color: meta.color, description: meta.description,
+                });
+                core.info(`建了标签：${name}`);
+              } catch (err) {
+                if (err.status !== 422) throw err; // 422 = 已存在
+              }
+            }
+
+            if (toAdd.length) {
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: pr.number, labels: toAdd,
+              });
+            }
+            for (const name of toRemove) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: pr.number, name,
+                });
+              } catch (err) {
+                if (err.status !== 404) throw err;
+              }
+            }
+
+            core.notice(`加：${toAdd.join(', ') || '无'} ／ 去：${toRemove.join(', ') || '无'}`);
