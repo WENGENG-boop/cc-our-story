@@ -23,7 +23,7 @@ jobs:
     name: 构建与测试
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -52,7 +52,7 @@ jobs:
     name: 前端资源检查
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
@@ -75,7 +75,7 @@ jobs:
     name: Docker 构建
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: 验证 Compose 配置
         run: docker compose config --quiet
