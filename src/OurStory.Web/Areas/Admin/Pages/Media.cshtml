@@ -15,11 +15,15 @@
     <h2>@Icon("upload")上传</h2>
     <p class="admin-panel-hint">当前存储：@Model.DriverName</p>
 
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data" data-media-upload>
         <label class="field">
-            <span>选一张图片</span>
-            <input type="file" name="file" accept="image/*" required>
+            <span>选择图片</span>
+            <input type="file" name="files" accept="image/*" multiple required data-media-files>
+            <ul class="file-picked" data-file-summary hidden></ul>
         </label>
+
+        <partial name="_UploadProgress" />
+
         <div class="form-actions">
             <button class="btn" type="submit">@Icon("upload")上传</button>
         </div>
@@ -44,8 +48,9 @@
             @foreach (var item in Model.Items.Items)
             {
                 <figure class="media-item">
+                    @* 格子里挂的是压好的小图，点开才去拿原图 *@
                     <a class="media-thumb" href="@item.Url" target="_blank" rel="noopener" data-thumb>
-                        <img src="@item.Url" alt="@item.Name" loading="lazy" decoding="async">
+                        <img src="@item.ThumbUrl" alt="@item.Name" width="720" height="540" loading="lazy" decoding="async">
                         <span class="media-thumb-failed">@Icon("circle-alert")<span>图片加载失败</span></span>
                     </a>
                     <figcaption>
