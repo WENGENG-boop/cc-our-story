@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://keeleycenc.com"><strong>在线体验</strong></a> ·
-  <a href="#-60-秒启动">快速开始</a> ·
+  <a href="#-本地部署">快速开始</a>
   <a href="https://github.com/keeleycenc/cc-our-story/releases/latest">下载最新版</a> ·
   <a href="https://github.com/keeleycenc/cc-our-story/issues">反馈建议</a>
 </p>
