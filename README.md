@@ -1,8 +1,27 @@
 # ❤️ CC Our Story 情侣空间
 
-![CC Our Story 首页预览](screenshot.png)
+<p align="center">
+  <strong>把两个人的心动、回忆和约定，写进属于自己的小宇宙</strong>
+</p>
 
-ASP.NET Core + SQLite，单进程、单文件数据库，最低配置 1 核 2G 的轻量服务器即可运行
+<p align="center">
+  <a href="https://github.com/keeleycenc/cc-our-story/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/keeleycenc/cc-our-story/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/keeleycenc/cc-our-story/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/keeleycenc/cc-our-story?display_name=tag&sort=semver"></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/github/license/keeleycenc/cc-our-story"></a>
+  <img alt=".NET 10" src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white">
+</p>
+
+<p align="center">
+  <a href="https://keeleycenc.com"><strong>在线体验</strong></a> ·
+  <a href="#-60-秒启动">快速开始</a> ·
+  <a href="https://github.com/keeleycenc/cc-our-story/releases/latest">下载最新版</a> ·
+  <a href="https://github.com/keeleycenc/cc-our-story/issues">反馈建议</a>
+</p>
+
+[![CC Our Story 首页：深色与浅色主题预览](screenshot.png)](https://keeleycenc.com)
+
+基于 ASP.NET Core Razor Pages、Entity Framework Core 和 SQLite，支持最低1 核 2G 的轻量服务器上 Docker 一键部署
 
 ## ✨ 功能
 
