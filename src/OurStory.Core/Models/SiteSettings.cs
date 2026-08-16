@@ -122,7 +122,7 @@ public class SiteSettings {
     /// <summary>
     /// 获取或设置心愿的最高标价
     /// </summary>
-    public int ShopPriceMax { get; set; } = 999;
+    public int ShopPriceMax { get; set; } = 500;
 
     /// <summary>
     /// 获取或设置发布后多少天没人兑换就自动下架
