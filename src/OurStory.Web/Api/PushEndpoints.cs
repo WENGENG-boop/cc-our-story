@@ -180,12 +180,12 @@ public static class PushEndpoints {
 
         return result.Reason switch {
             PushFailureReason.Unreachable =>
-                "推送网关不可达，通知发送失败。Chrome 走 fcm.googleapis.com，国内服务器常不通，换 Edge 可解决。详情见站点日志。",
+                "推送网关不可达，通知发送失败。详情见站点日志",
             PushFailureReason.Unauthorized =>
-                "推送网关拒绝本次请求，身份验证失败。请检查配置文件 Push 中的 Subject 和密钥对。详情见站点日志。",
+                "推送网关拒绝本次请求，身份验证失败。请检查配置文件 Push 中的 Subject 和密钥对。详情见站点日志",
             PushFailureReason.Expired =>
-                "设备订阅已失效，已清除记录。重新点击「开启通知」即可恢复。",
-            _ => "推送网关未接收通知，详情见站点日志。"
+                "设备订阅已失效，已清除记录。重新点击「开启通知」即可恢复",
+            _ => "推送网关未接收通知，详情见站点日志"
         };
     }
 
