@@ -13,17 +13,24 @@
  * - 优先使用本地缓存的订阅状态完成按钮渲染（避免页面白屏）
  * - 后台异步核实真实订阅状态，每步操作均设置超时保护
  * - 核实未完成时，按钮仍保持可点击，不影响用户交互
+ *
+ * 3. 能力检测只作用于「当前设备」那一块
+ *    授权、订阅、退订必须由本机浏览器完成；而发送测试、给对方发一句话、
+ *    通知偏好都是调用后端接口，由服务器投递，与本机能不能收通知无关。
+ *    检测不通过时只关掉前者，后者照常可用
  */
 (function () {
   'use strict';
 
+  /* 只有「当前设备」那一块在 data-push 里面。设备列表、通知偏好、给对方发一句话
+     都在它外面，少了这块照样得能用，所以这里不能因为找不到它就整个罢工 */
   const panel = document.querySelector('[data-push]');
-  if (!panel) return;
+  const inPanel = (selector) => (panel ? panel.querySelector(selector) : null);
 
-  const status = panel.querySelector('[data-push-status]');
-  const toggle = panel.querySelector('[data-push-toggle]');
-  const label = panel.querySelector('[data-push-label]');
-  const spinner = panel.querySelector('[data-push-busy]');
+  const status = inPanel('[data-push-status]');
+  const toggle = inPanel('[data-push-toggle]');
+  const label = inPanel('[data-push-label]');
+  const spinner = inPanel('[data-push-busy]');
   const sendForm = document.querySelector('[data-push-send]');
 
   const MEMORY = 'cc-push-endpoint';
@@ -138,25 +145,6 @@
 
     return response.json().catch(() => ({ ok: false, message: '暂时未收到服务器响应，请稍后再试。' }));
   };
-
-  if (!supported) {
-    say(isApple && !standalone
-      ? '在 iPhone 或 iPad 上，请先在 Safari 中选择「分享 → 添加到主屏幕」，再从主屏幕图标打开本站，才能开启通知'
-      : '当前浏览器暂不支持网页通知，请使用 Chrome、Edge、Firefox 或 Safari 访问。', 'warn');
-    render('off');
-    if (toggle) toggle.disabled = true;
-    return;
-  }
-
-  if (window.isSecureContext === false) {
-    say('内网环境下，浏览器通知功能仅支持 HTTPS 或 localhost 协议。'
-        + 'Android 设备可通过 USB 连接电脑，在 Chrome 的 chrome://inspect 中配置端口转发，'
-        + '使手机通过 localhost 访问本地服务；iOS 设备或希望简化操作时，'
-        + '可使用 cloudflared 等工具创建临时 HTTPS 隧道，获取可用地址。', 'warn');
-    render('off');
-    if (toggle) toggle.disabled = true;
-    return;
-  }
 
   const install = () => navigator.serviceWorker.register('/sw.js', { scope: '/' })
     .then(() => navigator.serviceWorker.ready);
@@ -306,19 +294,50 @@
     window.location.reload();
   };
 
-  if (toggle) {
-    toggle.addEventListener('click', async () => {
-      const wasOn = state === 'on';
-      render('busy', wasOn ? '正在关闭' : '正在开启');
+  const setupCurrentDevice = () => {
+    if (!panel) return;
 
-      try {
-        await (wasOn ? disable() : enable());
-      } catch (error) {
-        render(wasOn ? 'on' : 'off');
-        say((wasOn ? '关闭' : '开启') + '通知时遇到问题：' + (error && error.message ? error.message : error), 'warn');
-      }
+    if (!supported) {
+      say(isApple && !standalone
+        ? '在 iPhone 或 iPad 上，请先在 Safari 中选择「分享 → 添加到主屏幕」，再从主屏幕图标打开本站，才能开启通知'
+        : '当前浏览器不支持网页通知，无法在这台设备上接收，'
+          + '请改用 Chrome、Edge、Firefox 或 Safari。', 'warn');
+
+      render('off');
+      if (toggle) toggle.disabled = true;
+      return;
+    }
+
+    if (window.isSecureContext === false) {
+      say('内网环境下，浏览器通知功能仅支持 HTTPS 或 localhost 协议。'
+          + 'Android 设备可通过 USB 连接电脑，在 Chrome 的 chrome://inspect 中配置端口转发，'
+          + '使手机通过 localhost 访问本地服务；iOS 设备或希望简化操作时，'
+          + '可使用 cloudflared 等工具创建临时 HTTPS 隧道，获取可用地址。', 'warn');
+
+      render('off');
+      if (toggle) toggle.disabled = true;
+      return;
+    }
+
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        const wasOn = state === 'on';
+        render('busy', wasOn ? '正在关闭' : '正在开启');
+
+        try {
+          await (wasOn ? disable() : enable());
+        } catch (error) {
+          render(wasOn ? 'on' : 'off');
+          say((wasOn ? '关闭' : '开启') + '通知时遇到问题：' + (error && error.message ? error.message : error), 'warn');
+        }
+      });
+    }
+
+    refresh().catch(() => {
+      render(remembered() ? 'on' : 'off');
+      say('当前设备通知状态暂时无法读取，按钮仍可正常点击。', 'warn');
     });
-  }
+  };
 
   document.querySelectorAll('[data-device-test]').forEach((button) => {
     const card = button.closest('.device-card');
@@ -395,9 +414,5 @@
   }
 
   markCurrentDevice();
-
-  refresh().catch(() => {
-    render(remembered() ? 'on' : 'off');
-    say('当前设备通知状态暂时无法读取，按钮仍可正常点击操作。', 'warn');
-  });
+  setupCurrentDevice();
 }());
