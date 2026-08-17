@@ -31,6 +31,7 @@
 - 纪念日：记住每一个特别的日子，不错过下一次重逢
 - 留言：登录用户和访客都能写下想说的话，也可以彼此回复
 - 心意商城：把想为彼此做的事挂成心愿，用心意兑换、由对方履约确认
+- Web 通知：开启通知，TA 的每一刻更新，你都不会错过
 - 内容保护：重要的记录可以上锁，私密的纪念日只留给彼此
 - 后台：写记录、管纪念日和留言、传图片、改站点设置与账号口令等
 - 深浅色：默认跟随系统，也可以手动固定喜欢的配色
@@ -58,13 +59,13 @@ CC.OurStory/
 ├─ src/                        # 源代码
 │  ├─ OurStory.Core/           # 领域模型、设置契约、通用工具（不依赖任何框架）
 │  ├─ OurStory.Data/           # EF Core + SQLite：DbContext、映射、迁移
-│  ├─ OurStory.Services/       # 业务服务
+│  ├─ OurStory.Services/       # 业务服务（含 Web Push 加密与 VAPID 签名）
 │  └─ OurStory.Web/            # ASP.NET Core 站点
 │     ├─ Pages/                # 前台页面
 │     ├─ Areas/Admin/Pages/    # 后台
-│     ├─ Api/                  # 心动接口
-│     ├─ Infrastructure/       # 图标、令牌、访客指纹等
-│     └─ wwwroot/assets/       # 样式与脚本
+│     ├─ Api/                  # 心动与通知接口
+│     ├─ Infrastructure/       # 图标、令牌、访客指纹、通知投递等
+│     └─ wwwroot/              # 样式脚本、manifest 与 Service Worker
 ├─ tests/OurStory.Tests/       # 单元测试
 ├─ compose.yaml                # 一键起站配置文件
 ├─ Directory.Build.props       # 全解决方案共用的属性与包版本
@@ -84,16 +85,18 @@ CC.OurStory/
 ### 方式一：dotnet watch（开发时用这个）
 
 ```powershell
+# 改 `.cshtml`、`.cs`、`wwwroot` 下的样式脚本都会立刻生效，不用停掉重开，浏览器还会自己刷新
 dotnet watch --project src/OurStory.Web
 ```
 
-打开 <http://localhost:5080>
+打开 <http://localhost:5080>。移动端需要访问的话需加 `--lan` 开启局域网监听：
 
-改 `.cshtml`、`.cs`、`wwwroot` 下的样式脚本都会立刻生效，不用停掉重开，浏览器还会自己刷新
+```powershell
+# 日志会打印内网地址。可指定端口：--lan 8080。Docker 不受此开关影响
+dotnet watch --project src/OurStory.Web --lan
+```
 
-只跑一次不改代码的话，用 `dotnet run --project src/OurStory.Web` 就行 ——但它把 Razor 页面编译进了 dll，改完必须重启才看得到
-
-第一次启动会自动建库，并创建 `boy` / `girl` 两个账号。**口令是随机生成的，只在启动日志里出现这一次**，形如：
+第一次启动会自动建库，并创建 `boy` / `girl` 两个账号。**口令是随机生成的，只在启动日志里出现这一次**
 
 ```text
 warn: OurStory.Web.Infrastructure[0]已创建 Boy 账号：登录名 boy，初始口令 xxxxxxxxxxxxxx —— 这串口令只在这里出现一次，登录后请到后台改掉
@@ -105,21 +108,14 @@ warn: OurStory.Web.Infrastructure[0]已创建 Boy 账号：登录名 boy，初�
 
 ```powershell
 Copy-Item .env.example .env
-```
-
-`.env` 里只有一个对外端口，按需改一下，然后：
-
-```bash
 docker compose up -d --build
 ```
 
-打开 <http://localhost:8080>。两个账号的初始口令是随机生成的，从日志里捞：
+打开 <http://localhost:8080>。两个账号的初始口令是随机生成的，从日志查看：
 
 ```bash
 docker compose logs web
 ```
-
-登录后台就能改站点设置，时区、附件存到哪儿也在里面，不用动容器里的文件
 
 ## 🚀 远端部署
 
@@ -211,6 +207,32 @@ server {
 ```
 
 `X-Forwarded-For` 一定要转发：访客指纹靠它区分不同的人，缺了这个头，所有访客会被算成同一个
+
+## 🔔 通知
+
+本站使用浏览器标准 Web Push，不依赖任何第三方 SDK，通知内容端到端加密
+
+**前提**：站点必须使用 HTTPS（本地调试 `http://localhost` 亦可）。反代请配好证书，否则浏览器不会授予通知权限
+
+### 开通步骤
+
+**需要双方各自操作一遍：**
+
+1. **iOS 强制（Android 和 PC 端跳过此步）**：iPhone/iPad 需先用 Safari 打开站点，点击「分享 → 添加到主屏幕」，之后从主屏幕图标进入
+2. 进入「后台 → 通知」，点击「开启通知」，浏览器弹出权限框时选择「允许」
+3. 勾选需要接收的通知项，保存
+
+每台设备（手机、平板、电脑）需单独开通，已开通设备统一列出，可随时移除
+
+命令会输出 `https://xxx.trycloudflare.com`，手机直接访问即可，无需账号或证书。iPhone 需先「添加到主屏幕」再开启通知
+
+### 注意事项
+
+- **VAPID 密钥**（站点在浏览器端的身份标识）首次启动自动生成，保存在数据目录的 `ourstory.json` 中。**请勿修改**，否则所有已授权设备将集体失效
+- 若配置文件为只读挂载，启动日志会提示通知功能不可用
+- 同一浏览器只存一份推送订阅。多账号切换登录时，订阅归属**最后点开启**的账号，另一账号设备列表会清空——属浏览器限制，非站点问题。通知页会标明当前归属。多人需各自收通知请用不同浏览器
+- 订阅保留在浏览器中，清空服务端设备记录不会自动退订。如页面提示「服务端已无对应记录」，点击开启重新登记即可，无需手动撤销浏览器权限
+- **Chrome 首次读取通知状态可能很慢**（要连 Google 的推送服务，网络不通时能卡一两分钟），Edge 走 Windows 通知服务则很快
 
 ## ❓ 忘记口令
 

@@ -142,6 +142,66 @@ public enum HeartPointReason {
 }
 
 /// <summary>
+/// 浏览器订阅在服务端的归属状态
+/// </summary>
+/// <remarks>
+/// 区分两种非当前用户场景：
+/// - Other：同一浏览器切换了账号，订阅仍属于其他账号
+/// - Unknown：服务端无此订阅记录（数据被清理或设备已移除）
+/// </remarks>
+public enum PushDeviceOwnership {
+    /// <summary>
+    /// 服务端无记录，无法确定归属
+    /// </summary>
+    Unknown = 0,
+
+    /// <summary>
+    /// 归属当前登录用户
+    /// </summary>
+    Mine = 1,
+
+    /// <summary>
+    /// 归属其他账号
+    /// </summary>
+    Other = 2
+}
+
+/// <summary>
+/// 一条通知属于哪一类，决定它要不要看收件人后台勾的那几项
+/// </summary>
+public enum NotificationTopic {
+    /// <summary>
+    /// 对方发布了新的点点滴滴
+    /// </summary>
+    Moment = 0,
+
+    /// <summary>
+    /// 纪念日：对方新记下一个日子，或者今天 / 明天就是某个日子
+    /// </summary>
+    Anniversary = 1,
+
+    /// <summary>
+    /// 心意商城：上架、兑换、待确认、已完成
+    /// </summary>
+    Shop = 2,
+
+    /// <summary>
+    /// 想你：对方在首页点了想你
+    /// </summary>
+    MissYou = 3,
+
+    /// <summary>
+    /// 对方手动发来的一句话，不受上面四项开关影响
+    /// </summary>
+    Direct = 4,
+
+    /// <summary>
+    /// 后台点的「通知测试」，只发给自己，同样不受四项开关影响
+    /// </summary>
+    Test = 5
+}
+
+/// <summary>
 /// 表示心愿的使用确认方式
 /// </summary>
 public enum ShopRedeemMode {

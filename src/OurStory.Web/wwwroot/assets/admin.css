@@ -175,7 +175,8 @@ body.admin.sheet-open .admin-main { overflow: hidden }
 
 .admin-panel + .admin-panel { margin-top: 22px }
 
-.admin-panel > h2 {
+.admin-panel > h2,
+.admin-panel > .panel-head > h2 {
     display: flex;
     align-items: center;
     gap: 9px;
@@ -183,7 +184,19 @@ body.admin.sheet-open .admin-main { overflow: hidden }
     font: 400 19px var(--serif);
 }
 
-.admin-panel > h2 .icon { font-size: 17px; color: var(--pink-dark) }
+.admin-panel > h2 .icon,
+.admin-panel > .panel-head > h2 .icon { font-size: 17px; color: var(--pink-dark) }
+
+.panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.admin-panel > .panel-head > h2 { margin-bottom: 0 }
+
 .admin-panel-hint { margin: -10px 0 18px; color: var(--faint); font-size: 12px }
 
 .admin-vow {
@@ -557,15 +570,20 @@ body.admin.sheet-open .admin-main { overflow: hidden }
     text-align: left;
 }
 
-/* 弹出来的那张日历跟着站点配色走，深色模式下别闪一张白纸出来 */
 :root[data-theme="light"] .field input[type="date"],
-:root[data-theme="light"] .field input[type="datetime-local"] { color-scheme: light }
+:root[data-theme="light"] .field input[type="datetime-local"],
+:root[data-theme="light"] .field input[type="time"],
+:root[data-theme="light"] .field input[type="month"] { color-scheme: light }
 
 :root[data-theme="dark"] .field input[type="date"],
-:root[data-theme="dark"] .field input[type="datetime-local"] { color-scheme: dark }
+:root[data-theme="dark"] .field input[type="datetime-local"],
+:root[data-theme="dark"] .field input[type="time"],
+:root[data-theme="dark"] .field input[type="month"] { color-scheme: dark }
 
 .field input[type="date"]::-webkit-calendar-picker-indicator,
-.field input[type="datetime-local"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .72 }
+.field input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.field input[type="time"]::-webkit-calendar-picker-indicator,
+.field input[type="month"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .72 }
 
 /* 日期／时间选择器：全站共用 _DateField 这一份，外框自己画，
    里面仍是原生控件，手机上照样能调出系统的滚轮 */
@@ -719,6 +737,232 @@ body.admin.sheet-open .admin-main { overflow: hidden }
 .btn-solid-danger:hover { background: var(--danger-strong); border-color: var(--danger-strong); color: var(--danger-ink) }
 
 .btn-small { padding: 6px 11px; font-size: 12px; border-radius: 10px }
+
+/* 点不动的按钮就别再对鼠标有反应：hover 还变色会让人以为能点 */
+.btn.is-busy, .btn:disabled { opacity: .5; cursor: not-allowed }
+
+.btn:disabled:hover, .btn.is-busy:hover {
+    background: var(--ink);
+    border-color: transparent;
+    color: var(--paper);
+}
+
+.btn-ghost:disabled:hover, .btn-ghost.is-busy:hover {
+    background: transparent;
+    border-color: var(--line-strong);
+    color: var(--ink);
+}
+
+.btn-danger:disabled:hover, .btn-danger.is-busy:hover {
+    background: transparent;
+    border-color: var(--line-strong);
+    color: var(--danger);
+}
+
+.push-status { margin: 0 0 16px; color: var(--muted); font-size: 13px; line-height: 1.75 }
+.push-status:empty { display: none }
+
+[data-push] > .push-status:last-child { margin-bottom: 0 }
+.push-status[data-kind="ok"] { color: var(--pink-dark) }
+.push-status[data-kind="warn"] { color: var(--danger) }
+
+.push-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px }
+
+.push-switch {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 11px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: 13px var(--sans);
+    cursor: pointer;
+}
+
+.push-switch-track {
+    position: relative;
+    flex: none;
+    width: 46px;
+    height: 26px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: var(--surface-muted);
+    transition: background-color .2s, border-color .2s;
+}
+
+.push-switch-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    transition: transform .2s;
+}
+
+.push-switch[data-state="on"] .push-switch-track { background: var(--pink); border-color: var(--pink) }
+.push-switch[data-state="on"] .push-switch-thumb { transform: translateX(20px) }
+
+.push-switch-label { color: var(--muted); white-space: nowrap }
+.push-switch[data-state="on"] .push-switch-label { color: var(--pink-dark) }
+
+.push-switch:not(:disabled):hover .push-switch-track { border-color: var(--pink) }
+.push-switch:focus-visible { outline: 2px solid var(--pink); outline-offset: 4px; border-radius: 999px }
+
+.push-switch:disabled { cursor: not-allowed; opacity: .6 }
+
+.push-send { min-width: 128px; justify-content: center }
+
+.push-spinner {
+    display: none;
+    flex: none;
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    opacity: .75;
+    animation: push-spin .7s linear infinite;
+}
+
+.btn.is-busy .push-spinner { display: inline-block }
+.btn.is-busy .icon-idle { display: none }
+
+/* 标题旁边那个：只在忙的时候露出来，细一点，不抢标题的戏 */
+h2 > .push-spinner {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    margin-left: 2px;
+    border-width: 2px;
+    color: var(--pink-dark);
+}
+
+h2 > .push-spinner[hidden] { display: none }
+
+/* 设备卡片里的测试按钮，转圈跟着字号缩小 */
+.device-test .push-spinner { width: 12px; height: 12px }
+
+@keyframes push-spin { to { transform: rotate(360deg) } }
+
+@media (prefers-reduced-motion: reduce) {
+    .push-spinner { animation-duration: 2.4s }
+}
+
+.device-list { display: grid; gap: 10px }
+
+.device-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface-soft);
+}
+
+.device-card:hover { border-color: var(--line-strong); background: var(--surface) }
+
+.device-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    background: var(--pink-soft);
+    color: var(--pink-dark);
+}
+
+.device-body { min-width: 0; flex: 1 }
+.device-body > strong { display: block; overflow: hidden; font: 400 15px var(--serif); text-overflow: ellipsis; white-space: nowrap }
+
+.device-body > span {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin-top: 6px;
+    color: var(--faint);
+    font-size: 12px;
+}
+
+.device-body > span > span { display: inline-flex; align-items: center; gap: 5px }
+.device-body .icon { font-size: 13px }
+
+.device-actions { display: flex; flex: none; align-items: center; gap: 8px }
+.device-actions form { margin: 0 }
+
+/* 每台设备的测试结果就近显示，不用抬头去别处找 */
+.device-note { display: block; margin-top: 7px; font-size: 12px; color: var(--muted) }
+.device-note[data-kind="ok"] { color: var(--pink-dark) }
+.device-note[data-kind="warn"] { color: var(--danger) }
+
+.notify-options { display: grid; gap: 2px }
+
+.notify-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    padding: 11px 12px;
+    border-radius: 12px;
+    cursor: pointer;
+}
+
+.notify-option:hover { background: var(--surface-muted) }
+
+.notify-option > input {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: 3px;
+    accent-color: var(--pink-dark);
+}
+
+.notify-option > span { min-width: 0 }
+.notify-option strong { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 400 }
+.notify-option strong .icon { color: var(--pink-dark) }
+.notify-option small { display: block; margin-top: 5px; color: var(--faint); font-size: 12px; line-height: 1.7 }
+
+.notify-options.is-off { opacity: .45 }
+.notify-options.is-off .notify-option { cursor: default; pointer-events: none }
+
+.notify-time { cursor: default; padding-bottom: 2px }
+.notify-time:hover { background: none }
+.notify-time > span { padding-left: 27px }
+
+.notify-time-field { margin: 0 12px 6px 39px; max-width: 220px }
+
+.device-current {
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--pink-soft);
+    color: var(--pink-dark);
+    font: 400 11px var(--sans);
+    vertical-align: middle;
+}
+
+@media (max-width: 640px) {
+    .device-card { flex-wrap: wrap; row-gap: 14px }
+    .device-body { flex-basis: 0 }
+
+    .device-actions {
+        flex-basis: 100%;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
+    }
+
+    .device-actions > * { flex: 1 1 0 }
+    .device-actions .btn { width: 100%; justify-content: center }
+    .push-actions > .btn { flex: 1 1 0; min-width: 0; justify-content: center }
+    .notify-time > span { padding-left: 0 }
+    .notify-time-field { margin-left: 12px; max-width: none }
+}
 
 .admin-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 18px }
 
