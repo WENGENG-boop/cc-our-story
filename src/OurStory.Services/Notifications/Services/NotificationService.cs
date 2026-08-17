@@ -215,6 +215,7 @@ internal sealed class NotificationService(
         var sent = 0;
         var failed = 0;
         var dropped = new List<PushDevice>();
+        var reason = PushFailureReason.None;
         var now = SiteClock.UtcNow;
 
         foreach (var device in devices) {
@@ -229,10 +230,21 @@ internal sealed class NotificationService(
 
                 case PushSendOutcome.Gone:
                     dropped.Add(device);
+                    reason = Worse(reason, PushFailureReason.Expired);
                     break;
 
                 case PushSendOutcome.NotConfigured:
                     return PushDeliveryResult.Empty;
+
+                case PushSendOutcome.Unreachable:
+                    failed++;
+                    reason = Worse(reason, PushFailureReason.Unreachable);
+                    break;
+
+                case PushSendOutcome.Unauthorized:
+                    failed++;
+                    reason = Worse(reason, PushFailureReason.Unauthorized);
+                    break;
 
                 case PushSendOutcome.Failed:
                 default:
@@ -243,6 +255,7 @@ internal sealed class NotificationService(
                         failed++;
                     }
 
+                    reason = Worse(reason, PushFailureReason.Rejected);
                     break;
             }
         }
@@ -252,10 +265,13 @@ internal sealed class NotificationService(
         }
 
         _ = await db.SaveChangesAsync(cancellationToken);
-        return new PushDeliveryResult(sent, failed, dropped.Count);
+        return new PushDeliveryResult(sent, failed, dropped.Count, reason);
     }
 
     #region 私有方法
+
+    private static PushFailureReason Worse(PushFailureReason current, PushFailureReason next) =>
+        (PushFailureReason)Math.Max((int)current, (int)next);
 
     private static string Clamp(string? value, int limit) {
         var text = (value ?? string.Empty).Trim();
@@ -297,19 +313,20 @@ internal sealed class NotificationService(
     }
 
     private void EnsureSubject(string? siteOrigin) {
-        if (string.IsNullOrWhiteSpace(siteOrigin)
-            || !string.IsNullOrWhiteSpace(configuration.Current.Push.Subject)) {
+        if (VapidSubject.IsUsable(configuration.Current.Push.Subject)) {
             return;
         }
 
-        if (!Uri.TryCreate(siteOrigin, UriKind.Absolute, out var origin)
-            || origin.Scheme != Uri.UriSchemeHttps) {
+        if (VapidSubject.FromOrigin(siteOrigin) is not { } subject) {
             return;
         }
 
-        if (!configuration.Update(next => next.Push.Subject = origin.GetLeftPart(UriPartial.Authority), out var error)) {
-            logger.LogWarning("没能把 VAPID 联系方式写进配置文件：{Error}", error);
+        if (configuration.Update(next => next.Push.Subject = subject, out var error)) {
+            logger.LogInformation("已把 VAPID 联系方式记成 {Subject}。", subject);
+            return;
         }
+
+        logger.LogWarning("没能把 VAPID 联系方式写进配置文件：{Error}", error);
     }
 
     #endregion

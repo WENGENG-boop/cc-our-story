@@ -319,7 +319,7 @@ public class NotificationServiceTests {
     }
 
     [Fact]
-    public async Task 一直发不出去的设备最终会被清掉() {
+    public async Task 一直被网关拒收的设备最终会被清掉() {
         await using var harness = SqliteHarness.Create();
         var (_, girlId) = await harness.SeedCoupleAsync();
         var notifications = Service(harness, out var sender);
@@ -334,6 +334,52 @@ public class NotificationServiceTests {
         }
 
         Assert.Equal(0, await harness.Db.PushDevices.CountAsync());
+    }
+
+    [Fact]
+    public Task 连不上推送网关不会动设备记录() =>
+        服务器这头的问题不会动设备记录(PushSendOutcome.Unreachable, PushFailureReason.Unreachable);
+
+    [Fact]
+    public Task 网关拒签本站身份不会动设备记录() =>
+        服务器这头的问题不会动设备记录(PushSendOutcome.Unauthorized, PushFailureReason.Unauthorized);
+
+    private static async Task 服务器这头的问题不会动设备记录(PushSendOutcome outcome, PushFailureReason expected) {
+        await using var harness = SqliteHarness.Create();
+        var (_, girlId) = await harness.SeedCoupleAsync();
+        var notifications = Service(harness, out var sender);
+
+        _ = await notifications.RegisterDeviceAsync(girlId, Registration("https://push.example.com/send/girl"));
+        await notifications.SaveSettingAsync(girlId, new NotificationPreferences { Enabled = true });
+        sender.Outcome = outcome;
+
+        PushDeliveryResult result = PushDeliveryResult.Empty;
+        for (var attempt = 0; attempt < 20; attempt++) {
+            result = await notifications.SendAsync(
+                NotificationRequest.ToUser(NotificationTopic.Direct, girlId, Message()));
+        }
+
+        Assert.Equal(1, result.Failed);
+        Assert.Equal(0, result.Dropped);
+        Assert.Equal(expected, result.Reason);
+
+        Assert.Equal(0, (await harness.Db.PushDevices.SingleAsync()).FailureCount);
+    }
+
+    [Fact]
+    public async Task 订阅失效时报得出是订阅失效() {
+        await using var harness = SqliteHarness.Create();
+        var (_, girlId) = await harness.SeedCoupleAsync();
+        var notifications = Service(harness, out var sender);
+
+        _ = await notifications.RegisterDeviceAsync(girlId, Registration("https://push.example.com/send/girl"));
+        await notifications.SaveSettingAsync(girlId, new NotificationPreferences { Enabled = true });
+        sender.Outcome = PushSendOutcome.Gone;
+
+        var result = await notifications.SendAsync(
+            NotificationRequest.ToUser(NotificationTopic.Direct, girlId, Message()));
+
+        Assert.Equal(PushFailureReason.Expired, result.Reason);
     }
 
     [Fact]
@@ -429,6 +475,76 @@ public class NotificationServiceTests {
         Assert.Equal(boyId, await notifications.GetPartnerIdAsync(girlId));
     }
 
+    [Theory]
+    [InlineData("https://keeleycenc.com", "https://keeleycenc.com")]
+    [InlineData("http://keeleycenc.com", "https://keeleycenc.com")]
+    [InlineData("https://keeleycenc.com:8443", "https://keeleycenc.com")]
+    public async Task 第一台设备登记时记下站点域名(string origin, string expected) {
+        await using var harness = SqliteHarness.Create();
+        var (boyId, _) = await harness.SeedCoupleAsync();
+        var configuration = ScratchConfiguration(out _);
+        var notifications = Service(harness, out _, configuration);
+
+        _ = await notifications.RegisterDeviceAsync(
+            boyId,
+            Registration("https://push.example.com/send/x"),
+            origin);
+
+        Assert.Equal(expected, configuration.Current.Push.Subject);
+    }
+
+    [Theory]
+    [InlineData("http://localhost:5080")]
+    [InlineData("https://192.168.1.10:5080")]
+    [InlineData("http://ourstory.local")]
+    public async Task 推不出公网域名时不乱写联系方式(string origin) {
+        await using var harness = SqliteHarness.Create();
+        var (boyId, _) = await harness.SeedCoupleAsync();
+        var configuration = ScratchConfiguration(out _);
+        var notifications = Service(harness, out _, configuration);
+
+        _ = await notifications.RegisterDeviceAsync(
+            boyId,
+            Registration("https://push.example.com/send/x"),
+            origin);
+
+        Assert.Equal(string.Empty, configuration.Current.Push.Subject);
+    }
+
+    [Fact]
+    public async Task 已经配好的联系方式不会被覆盖() {
+        await using var harness = SqliteHarness.Create();
+        var (boyId, _) = await harness.SeedCoupleAsync();
+        var configuration = ScratchConfiguration(out _);
+        _ = configuration.Update(next => next.Push.Subject = "mailto:us@example.com", out _);
+
+        var notifications = Service(harness, out _, configuration);
+
+        _ = await notifications.RegisterDeviceAsync(
+            boyId,
+            Registration("https://push.example.com/send/x"),
+            "https://keeleycenc.com");
+
+        Assert.Equal("mailto:us@example.com", configuration.Current.Push.Subject);
+    }
+
+    [Fact]
+    public async Task 网关不认的旧联系方式会被换掉() {
+        await using var harness = SqliteHarness.Create();
+        var (boyId, _) = await harness.SeedCoupleAsync();
+        var configuration = ScratchConfiguration(out _);
+        _ = configuration.Update(next => next.Push.Subject = "mailto:noreply@ourstory.local", out _);
+
+        var notifications = Service(harness, out _, configuration);
+
+        _ = await notifications.RegisterDeviceAsync(
+            boyId,
+            Registration("https://push.example.com/send/x"),
+            "https://keeleycenc.com");
+
+        Assert.Equal("https://keeleycenc.com", configuration.Current.Push.Subject);
+    }
+
     [Fact]
     public async Task 订阅里的密钥不合法就不收() {
         await using var harness = SqliteHarness.Create();
@@ -460,15 +576,25 @@ public class NotificationServiceTests {
 
     private static PushMessage Message() => new("标题", "正文");
 
-    private static NotificationService Service(SqliteHarness harness, out SenderSpy sender) {
+    private static NotificationService Service(
+        SqliteHarness harness,
+        out SenderSpy sender,
+        ActiveConfiguration? configuration = null) {
         sender = new SenderSpy();
 
         return new NotificationService(
             harness.Db,
             sender,
-            new ActiveConfiguration(new ConfigurationStore("."), new OurStoryConfiguration()),
+            configuration ?? new ActiveConfiguration(new ConfigurationStore("."), new OurStoryConfiguration()),
             TestDoubles.Clock(),
             NullLogger<NotificationService>.Instance);
+    }
+
+    private static ActiveConfiguration ScratchConfiguration(out string directory) {
+        directory = Path.Combine(Path.GetTempPath(), "ourstory-tests", Guid.NewGuid().ToString("n"));
+        _ = Directory.CreateDirectory(directory);
+
+        return new ActiveConfiguration(new ConfigurationStore(directory), new OurStoryConfiguration());
     }
 
     #endregion

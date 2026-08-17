@@ -96,12 +96,47 @@ public sealed record PartnerReadiness(bool Enabled, int Devices) {
 }
 
 /// <summary>
+/// 一条通知没发出去的原因，够具体才能让人知道下一步该做什么
+/// </summary>
+public enum PushFailureReason {
+    /// <summary>
+    /// 没有失败
+    /// </summary>
+    None = 0,
+
+    /// <summary>
+    /// 设备上的订阅已经失效，记录也清掉了
+    /// </summary>
+    Expired = 1,
+
+    /// <summary>
+    /// 推送网关没收下这一条
+    /// </summary>
+    Rejected = 2,
+
+    /// <summary>
+    /// 服务器连不上推送网关
+    /// </summary>
+    Unreachable = 3,
+
+    /// <summary>
+    /// 推送网关不认本站的身份，站点配置要修
+    /// </summary>
+    Unauthorized = 4
+}
+
+/// <summary>
 /// 一次投递的结果，后台的「通知测试」拿它给人看个交代
 /// </summary>
 /// <param name="Sent">成功送达了几台设备</param>
 /// <param name="Failed">失败了几台</param>
 /// <param name="Dropped">因为订阅已失效而被清掉了几台</param>
-public sealed record PushDeliveryResult(int Sent, int Failed, int Dropped) {
+/// <param name="Reason">这次失败里最要紧的那个原因</param>
+public sealed record PushDeliveryResult(
+    int Sent,
+    int Failed,
+    int Dropped,
+    PushFailureReason Reason = PushFailureReason.None) {
     /// <summary>
     /// 获取这次一共动了几台设备
     /// </summary>

@@ -22,14 +22,32 @@ internal enum PushSendOutcome {
     Gone = 1,
 
     /// <summary>
-    /// 这次没成，但订阅本身也许还活着，下次还能再试
+    /// 网关收下了请求但拒收这一条，问题多半出在这份订阅上：攒够次数才判掉这台设备
     /// </summary>
     Failed = 2,
 
     /// <summary>
     /// VAPID 还没配好，压根没发出去
     /// </summary>
-    NotConfigured = 3
+    NotConfigured = 3,
+
+    /// <summary>
+    /// 服务器到推送网关这一跳不通：连不上、超时、被限流，或者网关自己在闹脾气
+    /// </summary>
+    /// <remarks>
+    /// 国内服务器发 Chrome 的通知就长期是这个下场 —— <c>fcm.googleapis.com</c> 出不去。
+    /// 跟设备本身一点关系都没有，所以绝不能因为它去动设备记录
+    /// </remarks>
+    Unreachable = 4,
+
+    /// <summary>
+    /// 网关拒签本站的身份：VAPID 密钥或 <c>sub</c> 有问题
+    /// </summary>
+    /// <remarks>
+    /// 这是站点自己要修的事，而且一旦发生就是所有设备一起中招。
+    /// 同样不能去动设备记录 —— 否则配错一次就会把两个人的设备全删光
+    /// </remarks>
+    Unauthorized = 5
 }
 
 /// <summary>

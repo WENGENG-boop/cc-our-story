@@ -63,17 +63,22 @@ internal sealed class WebPushSender(
         }
 
         byte[] body;
-        string authorization;
         try {
             body = WebPushPayload.Encrypt(
                 Encoding.UTF8.GetBytes(payload),
                 VapidKeys.Decode(device.P256dh, VapidKeys.PublicKeyLength, "p256dh"),
                 VapidKeys.Decode(device.Auth, 16, "auth"));
-
-            authorization = BuildAuthorization(push.PublicKey, push.PrivateKey, push.Subject, endpoint);
         } catch (FormatException exception) {
             logger.LogWarning(exception, "设备 {DeviceId} 的推送密钥不可用。", device.Id);
             return PushSendOutcome.Gone;
+        }
+
+        string authorization;
+        try {
+            authorization = BuildAuthorization(push.PublicKey, push.PrivateKey, push.Subject, endpoint);
+        } catch (Exception exception) when (exception is FormatException or CryptographicException) {
+            logger.LogError(exception, "站点 VAPID 密钥无效，无法发送推送通知。请检查配置文件中 Push 相关配置项。");
+            return PushSendOutcome.Unauthorized;
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint) {
@@ -95,8 +100,13 @@ internal sealed class WebPushSender(
             using var response = await clients.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
             return await ReadOutcomeAsync(device, response, cancellationToken);
         } catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested) {
-            logger.LogWarning(exception, "给设备 {DeviceId} 发通知时没连上推送服务。", device.Id);
-            return PushSendOutcome.Failed;
+            logger.LogWarning(
+                exception,
+                "设备 {DeviceId} 通知发送失败：推送网关 {Gateway} 不可达。",
+                device.Id,
+                endpoint.Host);
+
+            return PushSendOutcome.Unreachable;
         }
     }
 
@@ -117,11 +127,33 @@ internal sealed class WebPushSender(
         }
 
         var detail = await response.Content.ReadAsStringAsync(cancellationToken);
+        var status = (int)response.StatusCode;
+        var trimmed = detail.Length > 200 ? detail[..200] : detail;
+
+        // 401 / 403 是网关在说「我不认你这个站点」，全站一起中招，跟这台设备无关。
+        // Apple 尤其会因为 sub 里的域名联系不到人而回 BadJwtToken
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) {
+            logger.LogError(
+                "推送网关 {Gateway} 拒签本站身份：{Status} {Detail}（sub={Subject}）",
+                response.RequestMessage?.RequestUri?.Host,
+                status,
+                trimmed,
+                VapidSubject.Normalize(configuration.Current.Push.Subject));
+
+            return PushSendOutcome.Unauthorized;
+        }
+
+        // 限流和网关自己的故障都会过去，等下一条通知再试就好
+        if (response.StatusCode is HttpStatusCode.TooManyRequests || status >= 500) {
+            logger.LogWarning("推送网关暂时不收：{Status} {Detail}", status, trimmed);
+            return PushSendOutcome.Unreachable;
+        }
+
         logger.LogWarning(
             "给设备 {DeviceId} 发通知失败：{Status} {Detail}",
             device.Id,
-            (int)response.StatusCode,
-            detail.Length > 200 ? detail[..200] : detail);
+            status,
+            trimmed);
 
         return PushSendOutcome.Failed;
     }
@@ -130,7 +162,7 @@ internal sealed class WebPushSender(
         var claims = new Dictionary<string, object>(StringComparer.Ordinal) {
             ["aud"] = endpoint.GetLeftPart(UriPartial.Authority),
             ["exp"] = DateTimeOffset.UtcNow.Add(TokenLifetime).ToUnixTimeSeconds(),
-            ["sub"] = Subject(subject)
+            ["sub"] = VapidSubject.Normalize(subject)
         };
 
         var header = Base64Url.EncodeToString("""{"typ":"JWT","alg":"ES256"}"""u8);
@@ -146,15 +178,6 @@ internal sealed class WebPushSender(
             DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
 
         return $"vapid t={header}.{payload}.{Base64Url.EncodeToString(signature)}, k={publicKey}";
-    }
-
-    private static string Subject(string? configured) {
-        var value = (configured ?? string.Empty).Trim();
-
-        return value.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase)
-            || value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
-                ? value
-                : "mailto:noreply@ourstory.local";
     }
 
     #endregion

@@ -29,7 +29,11 @@ public class PushOptions {
     /// <summary>
     /// 获取或设置 VAPID 的 <c>sub</c>，推送服务出问题时它们照着这个联系站长
     /// </summary>
-    /// <remarks>必须是 <c>mailto:</c> 或 <c>https://</c> 开头，留空按本机地址兜底。</remarks>
+    /// <remarks>
+    /// 必须是 <c>mailto:</c> 或 <c>https://</c> 开头，而且里面的域名要在公网上联系得到人：
+    /// Apple 的网关会真的去看这个域名，写 <c>.local</c>、<c>localhost</c> 或者裸 IP
+    /// 会让它拒签本站全部通知（<c>403 BadJwtToken</c>），而 Chrome 的 FCM 不查
+    /// </remarks>
     public string Subject { get; set; } = string.Empty;
 
     /// <summary>

@@ -149,8 +149,71 @@ public class WebPushTests {
         Assert.Equal(PushSendOutcome.Delivered, await OutcomeOf(HttpStatusCode.OK));
         Assert.Equal(PushSendOutcome.Gone, await OutcomeOf(HttpStatusCode.NotFound));
         Assert.Equal(PushSendOutcome.Gone, await OutcomeOf(HttpStatusCode.Gone));
-        Assert.Equal(PushSendOutcome.Failed, await OutcomeOf(HttpStatusCode.TooManyRequests));
-        Assert.Equal(PushSendOutcome.Failed, await OutcomeOf(HttpStatusCode.InternalServerError));
+
+        // 限流和网关自己的故障会过去，等下一条再试
+        Assert.Equal(PushSendOutcome.Unreachable, await OutcomeOf(HttpStatusCode.TooManyRequests));
+        Assert.Equal(PushSendOutcome.Unreachable, await OutcomeOf(HttpStatusCode.InternalServerError));
+
+        // 401 / 403 是网关不认本站，全站一起中招，不能算到某台设备头上
+        Assert.Equal(PushSendOutcome.Unauthorized, await OutcomeOf(HttpStatusCode.Unauthorized));
+        Assert.Equal(PushSendOutcome.Unauthorized, await OutcomeOf(HttpStatusCode.Forbidden));
+
+        // 剩下的才是「这一条被拒了」
+        Assert.Equal(PushSendOutcome.Failed, await OutcomeOf(HttpStatusCode.BadRequest));
+        Assert.Equal(PushSendOutcome.Failed, await OutcomeOf(HttpStatusCode.RequestEntityTooLarge));
+    }
+
+    [Theory]
+    // Apple 的网关会真的去看 sub 里的域名，联系不到人的一律拒签，
+    // 所以这些写法一个都不能出现在请求里
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("mailto:noreply@ourstory.local")]
+    [InlineData("mailto:noreply@localhost")]
+    [InlineData("mailto:没有at符号")]
+    [InlineData("https://localhost")]
+    [InlineData("https://localhost:5080")]
+    [InlineData("https://192.168.1.10")]
+    [InlineData("https://ourstory.internal")]
+    [InlineData("http://ourstory.example.com")]
+    [InlineData("我就随便写点什么")]
+    public async Task 联系不到人的sub一律换成兜底值(string configured) {
+        var (sender, capture) = Sender(subject: configured);
+
+        _ = await sender.SendAsync(Device(PushSubscriber.Create()), "{}");
+
+        Assert.Equal(VapidSubject.Fallback, SubjectOf(capture));
+    }
+
+    [Theory]
+    [InlineData("mailto:us@example.com")]
+    [InlineData("https://ourstory.example.com")]
+    [InlineData("https://keeleycenc.com")]
+    public async Task 联系得到人的sub原样用(string configured) {
+        var (sender, capture) = Sender(subject: configured);
+
+        _ = await sender.SendAsync(Device(PushSubscriber.Create()), "{}");
+
+        Assert.Equal(configured, SubjectOf(capture));
+    }
+
+    [Fact]
+    public async Task 站点自己的密钥坏了不牵连设备() {
+        var configuration = new ActiveConfiguration(
+            new ConfigurationStore("."),
+            new OurStoryConfiguration {
+                Push = {
+                    PublicKey = KeyPair.PublicKey,
+                    PrivateKey = "这不是私钥",
+                    Subject = "https://ourstory.example.com"
+                }
+            });
+
+        var capture = new CapturingHandler(HttpStatusCode.Created);
+        var sender = new WebPushSender(new StubClients(capture), configuration, NullLogger<WebPushSender>.Instance);
+
+        Assert.Equal(PushSendOutcome.Unauthorized, await sender.SendAsync(Device(PushSubscriber.Create()), "{}"));
+        Assert.Null(capture.Request);
     }
 
     [Fact]
@@ -181,6 +244,14 @@ public class WebPushTests {
     private static async Task<PushSendOutcome> OutcomeOf(HttpStatusCode status) {
         var (sender, _) = Sender(status);
         return await sender.SendAsync(Device(PushSubscriber.Create()), "{}");
+    }
+
+    private static string? SubjectOf(CapturingHandler capture) {
+        var header = capture.Request!.Headers.GetValues("Authorization").Single();
+        var token = header["vapid t=".Length..header.IndexOf(", k=", StringComparison.Ordinal)];
+        var claims = JsonDocument.Parse(Base64Url.DecodeFromChars(token.Split('.')[1])).RootElement;
+
+        return claims.GetProperty("sub").GetString();
     }
 
     private static (WebPushSender Sender, CapturingHandler Capture) Sender(
