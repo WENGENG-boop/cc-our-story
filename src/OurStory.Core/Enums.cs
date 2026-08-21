@@ -138,7 +138,32 @@ public enum HeartPointReason {
     /// <summary>
     /// 当天第一次来看看
     /// </summary>
-    DailyVisit = 5
+    DailyVisit = 5,
+
+    /// <summary>
+    /// 完成一道心有灵犀每日题目
+    /// </summary>
+    AffinityAnswer = 6
+}
+
+/// <summary>
+/// 心有灵犀题型。每日题目保存该值的快照
+/// </summary>
+public enum AffinityQuestionType {
+    /// <summary>
+    /// 单选题
+    /// </summary>
+    SingleChoice = 0,
+
+    /// <summary>
+    /// 多选题
+    /// </summary>
+    MultipleChoice = 1,
+
+    /// <summary>
+    /// 开放题
+    /// </summary>
+    OpenEnded = 2
 }
 
 /// <summary>
@@ -203,7 +228,12 @@ public enum NotificationTopic {
     /// <summary>
     /// 后台点的「通知测试」，只发给自己，同样不受那几项开关影响
     /// </summary>
-    Test = 6
+    Test = 6,
+
+    /// <summary>
+    /// 心有灵犀：对方完成了今日回答
+    /// </summary>
+    Affinity = 7
 }
 
 /// <summary>

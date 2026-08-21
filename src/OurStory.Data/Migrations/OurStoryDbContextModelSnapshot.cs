@@ -17,6 +17,169 @@ namespace OurStory.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
 
+            modelBuilder.Entity("OurStory.Core.Entities.AffinityAnswer", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("AnsweredAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("DailyQuestionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SelectedOptionIndexesJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TextAnswer")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("DailyQuestionId", "Role")
+                        .IsUnique();
+
+                    b.HasIndex("DailyQuestionId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("affinity_answers", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_affinity_answers_payload", "json_valid(\"SelectedOptionIndexesJson\") AND json_type(\"SelectedOptionIndexesJson\") = 'array' AND ((json_array_length(\"SelectedOptionIndexesJson\") > 0 AND \"TextAnswer\" IS NULL) OR (json_array_length(\"SelectedOptionIndexesJson\") = 0 AND \"TextAnswer\" IS NOT NULL AND length(trim(\"TextAnswer\")) > 0))");
+                        });
+                });
+
+            modelBuilder.Entity("OurStory.Core.Entities.AffinityDailyQuestion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Day")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("LoveDay")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("OptionsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("QuestionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("QuestionText")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("RewardPoints")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Day")
+                        .IsUnique();
+
+                    b.HasIndex("QuestionId");
+
+                    b.ToTable("affinity_daily_questions", (string)null);
+                });
+
+            modelBuilder.Entity("OurStory.Core.Entities.AffinityQuestion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsSealed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("RewardPoints")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("UpdatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("IsActive");
+
+                    b.ToTable("affinity_questions", (string)null);
+                });
+
+            modelBuilder.Entity("OurStory.Core.Entities.AffinityQuestionOption", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("QuestionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuestionId", "SortOrder")
+                        .IsUnique();
+
+                    b.ToTable("affinity_question_options", (string)null);
+                });
+
             modelBuilder.Entity("OurStory.Core.Entities.Anniversary", b =>
                 {
                     b.Property<int>("Id")
@@ -297,6 +460,9 @@ namespace OurStory.Data.Migrations
                     b.Property<int>("UserId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("Affinity")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("Anniversaries")
                         .HasColumnType("INTEGER");
 
@@ -568,6 +734,56 @@ namespace OurStory.Data.Migrations
                     b.ToTable("users", (string)null);
                 });
 
+            modelBuilder.Entity("OurStory.Core.Entities.AffinityAnswer", b =>
+                {
+                    b.HasOne("OurStory.Core.Entities.AffinityDailyQuestion", "DailyQuestion")
+                        .WithMany("Answers")
+                        .HasForeignKey("DailyQuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OurStory.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DailyQuestion");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("OurStory.Core.Entities.AffinityDailyQuestion", b =>
+                {
+                    b.HasOne("OurStory.Core.Entities.AffinityQuestion", "Question")
+                        .WithMany("DailyQuestions")
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Question");
+                });
+
+            modelBuilder.Entity("OurStory.Core.Entities.AffinityQuestion", b =>
+                {
+                    b.HasOne("OurStory.Core.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CreatedByUser");
+                });
+
+            modelBuilder.Entity("OurStory.Core.Entities.AffinityQuestionOption", b =>
+                {
+                    b.HasOne("OurStory.Core.Entities.AffinityQuestion", "Question")
+                        .WithMany("Options")
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Question");
+                });
+
             modelBuilder.Entity("OurStory.Core.Entities.Anniversary", b =>
                 {
                     b.HasOne("OurStory.Core.Entities.User", "Author")
@@ -680,6 +896,18 @@ namespace OurStory.Data.Migrations
                     b.Navigation("Preset");
 
                     b.Navigation("Seller");
+                });
+
+            modelBuilder.Entity("OurStory.Core.Entities.AffinityDailyQuestion", b =>
+                {
+                    b.Navigation("Answers");
+                });
+
+            modelBuilder.Entity("OurStory.Core.Entities.AffinityQuestion", b =>
+                {
+                    b.Navigation("DailyQuestions");
+
+                    b.Navigation("Options");
                 });
 
             modelBuilder.Entity("OurStory.Core.Entities.Comment", b =>

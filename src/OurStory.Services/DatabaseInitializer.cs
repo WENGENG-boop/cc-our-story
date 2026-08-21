@@ -11,8 +11,10 @@ using OurStory.Core.Models;
 using OurStory.Core.Options;
 using OurStory.Data;
 using OurStory.Services.Accounts;
+using OurStory.Services.Affinity;
 using OurStory.Services.HeartPoints;
 using OurStory.Services.Settings;
+using System.Globalization;
 using System.Security.Cryptography;
 
 namespace OurStory.Services;
@@ -24,31 +26,53 @@ namespace OurStory.Services;
 public record SeededAccount(string UserName, string Password, UserRole Role);
 
 /// <summary>
-/// 
+/// 获取数据库初始化服务接口
 /// </summary>
 public interface IDatabaseInitializer {
     /// <summary>
-    /// 
+    /// 初始化数据库数据
     /// </summary>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
+    /// <param name="cancellationToken">获取取消令牌</param>
+    /// <returns>获取已初始化的账户列表</returns>
     Task<IReadOnlyList<SeededAccount>> InitializeAsync(CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// 获取数据库初始化服务
+/// </summary>
+/// <param name="db">获取数据库上下文</param>
+/// <param name="settings">获取设置服务</param>
+/// <param name="heartPoints">获取心点服务</param>
+/// <param name="configuration">获取活动配置</param>
+/// <param name="logger">获取日志记录器</param>
 public class DatabaseInitializer(
     OurStoryDbContext db,
     ISettingsService settings,
     IHeartPointService heartPoints,
     ActiveConfiguration configuration,
     ILogger<DatabaseInitializer> logger) : IDatabaseInitializer {
-    /// <summary>访客指纹用的盐，存在设置表里，重启后统计不会断</summary>
-    public const string VisitorSecretKey = "system.visitorSecret";
-
-    /// <summary>自带心愿预设放进去的时间，有值就再也不放第二次</summary>
-    public const string ShopPresetsSeededKey = "shop.presetsSeededAt";
-
     private readonly SiteOptions _options = configuration.Site;
 
+    /// <summary>
+    /// 获取访客指纹使用的盐配置键，存储在设置表中，重启后统计不会中断
+    /// </summary>
+    public const string VisitorSecretKey = "system.visitorSecret";
+
+    /// <summary>
+    /// 获取商店预设初始化时间配置键，有值后不会重复初始化
+    /// </summary>
+    public const string ShopPresetsSeededKey = "shop.presetsSeededAt";
+
+    /// <summary>
+    /// 获取心有灵犀预设题库已导入版本配置键
+    /// </summary>
+    public const string AffinityQuestionsVersionKey = "affinity.questionsPresetVersion";
+
+    /// <summary>
+    /// 初始化数据库数据
+    /// </summary>
+    /// <param name="cancellationToken">获取取消令牌</param>
+    /// <returns>获取已初始化的账户列表</returns>
     public async Task<IReadOnlyList<SeededAccount>> InitializeAsync(CancellationToken cancellationToken = default) {
         await db.Database.MigrateAsync(cancellationToken);
 
@@ -56,9 +80,71 @@ public class DatabaseInitializer(
         var seeded = await EnsureAccountsAsync(cancellationToken);
 
         await EnsureShopPresetsAsync(cancellationToken);
+        await EnsureAffinityQuestionsAsync(cancellationToken);
         await EnsureHeartPointsAsync(cancellationToken);
 
         return seeded;
+    }
+
+    #region 私有方法
+
+    private async Task EnsureAffinityQuestionsAsync(CancellationToken cancellationToken) {
+        var rawVersion = await settings.GetRawAsync(AffinityQuestionsVersionKey, cancellationToken);
+        var appliedVersion = int.TryParse(rawVersion, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedVersion)
+            ? Math.Max(0, parsedVersion)
+            : 0;
+
+        if (appliedVersion >= DefaultAffinityQuestions.CurrentVersion) {
+            return;
+        }
+
+        var candidates = DefaultAffinityQuestions.All
+            .Where(seed => seed.IntroducedInVersion > appliedVersion &&
+                seed.IntroducedInVersion <= DefaultAffinityQuestions.CurrentVersion)
+            .ToList();
+        var candidateTexts = candidates.Select(seed => seed.Text).ToList();
+        var existingTexts = candidateTexts.Count == 0
+            ? []
+            : await db.AffinityQuestions
+                .Where(question => candidateTexts.Contains(question.Text))
+                .Select(question => question.Text)
+                .ToHashSetAsync(cancellationToken);
+
+        var now = DateTimeOffset.UtcNow;
+        var addedCount = 0;
+        foreach (var seed in candidates.Where(seed => !existingTexts.Contains(seed.Text))) {
+            _ = db.AffinityQuestions.Add(new AffinityQuestion {
+                Text = seed.Text,
+                Category = seed.Category,
+                Type = AffinityQuestionType.SingleChoice,
+                RewardPoints = 5,
+                IsActive = true,
+                IsSealed = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+                Options = [.. seed.Options.Select((text, index) => new AffinityQuestionOption {
+                    Text = text,
+                    SortOrder = index
+                })]
+            });
+            addedCount++;
+        }
+
+        if (addedCount > 0) {
+            _ = await db.SaveChangesAsync(cancellationToken);
+        }
+
+        await settings.SetRawAsync(
+            AffinityQuestionsVersionKey,
+            DefaultAffinityQuestions.CurrentVersion.ToString(CultureInfo.InvariantCulture),
+            cancellationToken);
+
+        if (addedCount > 0 && logger.IsEnabled(LogLevel.Information)) {
+            logger.LogInformation(
+                "心有灵犀预设题库已升级至版本 {Version}，新增 {Count} 道题目。",
+                DefaultAffinityQuestions.CurrentVersion,
+                addedCount);
+        }
     }
 
     private async Task EnsureShopPresetsAsync(CancellationToken cancellationToken) {
@@ -169,4 +255,6 @@ public class DatabaseInitializer(
         var cleaned = new string([.. (userName ?? string.Empty).Where(char.IsAsciiLetterOrDigit)]);
         return cleaned.Length > 0 ? cleaned.ToLowerInvariant() : fallback;
     }
+
+    #endregion
 }
