@@ -32,6 +32,21 @@ public class NotificationSetting {
     public bool Enabled { get; set; }
 
     /// <summary>
+    /// 获取或设置是否通过 Web Push 接收通知
+    /// </summary>
+    public bool WebPushEnabled { get; set; } = true;
+
+    /// <summary>
+    /// 获取或设置是否通过 Email 接收通知
+    /// </summary>
+    public bool EmailEnabled { get; set; }
+
+    /// <summary>
+    /// 获取或设置这个账号接收通知的邮箱地址
+    /// </summary>
+    public string EmailAddress { get; set; } = string.Empty;
+
+    /// <summary>
     /// 获取或设置是否接收点点滴滴的通知
     /// </summary>
     public bool Moments { get; set; } = true;

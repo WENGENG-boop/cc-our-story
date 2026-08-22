@@ -793,6 +793,31 @@ body.admin.sheet-open .admin-main { overflow: hidden }
 
 .form-actions { display: flex; align-items: center; gap: 12px; margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--line) }
 
+.channel-status {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    padding: 5px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.channel-status[data-kind="ok"] {
+    border-color: var(--pink-soft);
+    background: var(--pink-softer);
+    color: var(--pink-dark);
+}
+
+.email-master {
+    margin: 0 0 18px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface-soft);
+}
+
 /* 9. 按钮 ---------------------------------------------------------------- */
 .btn {
     display: inline-flex;
@@ -990,6 +1015,15 @@ h2 > .push-spinner[hidden] { display: none }
 
 .notify-options { display: grid; gap: 2px }
 
+.notify-section-label {
+    margin: 15px 12px 5px;
+    color: var(--faint);
+    font-size: 11px;
+    letter-spacing: .12em;
+}
+
+.notify-options > .notify-section-label:first-child { margin-top: 4px }
+
 .notify-option {
     display: flex;
     align-items: flex-start;
@@ -1013,6 +1047,56 @@ h2 > .push-spinner[hidden] { display: none }
 .notify-option strong { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 400 }
 .notify-option strong .icon { color: var(--pink-dark) }
 .notify-option small { display: block; margin-top: 5px; color: var(--faint); font-size: 12px; line-height: 1.7 }
+
+.notify-email-option {
+    margin: 2px 0 5px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface-soft);
+}
+
+.notify-email-option .notify-option:hover { background: transparent }
+
+.email-personal-controls {
+    margin: 0;
+    padding: 0 12px 13px 39px;
+}
+
+.email-personal-controls > label {
+    display: block;
+    margin-bottom: 7px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.email-personal-input-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+}
+
+.email-personal-input-row .btn { min-height: 43px; justify-content: center }
+
+.notify-email-option.is-unavailable {
+    background: var(--surface-muted);
+    color: var(--faint);
+    opacity: .58;
+}
+
+.notify-email-option.is-unavailable .notify-option,
+.notify-email-option.is-unavailable .field,
+.notify-email-option.is-unavailable .btn { cursor: not-allowed }
+
+.notify-email-option.is-unavailable .notify-option strong .icon { color: var(--faint) }
+
+.field input:disabled,
+.field select:disabled,
+.field textarea:disabled {
+    background: var(--surface-muted);
+    color: var(--faint);
+    cursor: not-allowed;
+}
 
 .notify-options.is-off { opacity: .45 }
 .notify-options.is-off .notify-option { cursor: default; pointer-events: none }
@@ -1048,6 +1132,9 @@ h2 > .push-spinner[hidden] { display: none }
     .push-actions > .btn { flex: 1 1 0; min-width: 0; justify-content: center }
     .notify-time > span { padding-left: 0 }
     .notify-time-field { margin-left: 12px; max-width: none }
+    .email-personal-controls { padding-left: 12px }
+    .email-personal-input-row { grid-template-columns: 1fr }
+    .email-personal-controls .btn { width: 100% }
 }
 
 .admin-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 18px }
