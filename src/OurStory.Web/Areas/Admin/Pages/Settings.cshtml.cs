@@ -24,6 +24,7 @@ namespace OurStory.Web.Areas.Admin.Pages;
 public class SettingsModel(
     ISettingsService settings,
     ActiveConfiguration configuration) : PageModel {
+
     /// <summary>
     /// 执行 Input 操作
     /// </summary>
@@ -39,20 +40,15 @@ public class SettingsModel(
     /// 获取一个值，指示当前登录的人能否改心意规则
     /// </summary>
     /// <remarks>
-    /// 心意的发放和价格区间只让男主动：这类站点一般是男生搭给女生的
+    /// 获取一个值，指示当前用户是否有权配置心意发放与价格区间
     /// </remarks>
     public bool CanEditHeartRules => User.Role() == UserRole.Boy;
 
     /// <summary>
-    /// 获取当前实际生效的存储方式：OSS 参数没配全时它会和上面选的不一样
+    /// 获取当前实际生效的存储方式；OSS 配置不完整时可能与所选策略不同
     /// </summary>
     public string EffectiveDriverText =>
         configuration.Storage.EffectiveDriver == StorageDriver.AliyunOss ? "阿里云 OSS" : "本地目录";
-
-    /// <summary>
-    /// 获取配置文件的位置
-    /// </summary>
-    public string ConfigFilePath => configuration.FilePath;
 
     /// <summary>
     /// 获取一个值，指示邮件通知当前是否已经可用
@@ -172,7 +168,7 @@ public class SettingsModel(
 
         await settings.SaveAsync(site, cancellationToken);
 
-        // 时区和附件存储落在配置文件里，写不进去（比如只读挂载）提示
+        // 时区和附件存储写入配置文件；写入失败时向页面返回错误提示。
         if (!configuration.Update(SaveRuntimeOptions, out var error)) {
             Error = $"内容已经保存，但 {configuration.FilePath} 无法写入：{error}";
             return Page();
@@ -183,7 +179,7 @@ public class SettingsModel(
     }
 
     /// <summary>
-    /// 心意规则的范围检查，都合规就返回 null
+    /// 验证心意规则范围；验证通过时返回 null
     /// </summary>
     private string? HeartRuleError() {
         if (!InRange(Input.RewardVisit, 0, 100)
@@ -202,7 +198,7 @@ public class SettingsModel(
         }
 
         if (Input.ShopPriceMax < Input.ShopPriceMin) {
-            return "心愿的最高价不能比最低价还低。";
+            return "心愿最高价格不能低于最低价格。";
         }
 
         return InRange(Input.ShopListingDays, 1, 3650) && InRange(Input.ShopValidDays, 1, 3650)
@@ -287,7 +283,7 @@ public class SettingsModel(
         public string TimeZone { get; set; } = "Asia/Shanghai";
 
         /// <summary>
-        /// 获取或设置附件存储方式；留空表示自动（OSS 参数填全了就走 OSS）
+        /// 获取或设置附件存储方式；留空表示在 OSS 配置完整时自动使用 OSS
         /// </summary>
         public StorageDriver? StorageDriver { get; set; }
 

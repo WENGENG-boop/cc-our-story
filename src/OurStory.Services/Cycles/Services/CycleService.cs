@@ -1,0 +1,611 @@
+// Copyright (c) 2026 Keeleycenc.
+// Licensed under the MIT License.
+
+using Microsoft.EntityFrameworkCore;
+using OurStory.Core;
+using OurStory.Core.Entities;
+using OurStory.Core.Models;
+using OurStory.Core.Time;
+using OurStory.Data;
+using OurStory.Services.Notifications;
+using OurStory.Services.Settings;
+
+namespace OurStory.Services.Cycles;
+
+internal sealed class CycleService(
+    OurStoryDbContext db,
+    SiteClock clock,
+    ISettingsService settings,
+    ICycleAnalysisService analysis,
+    ICycleInsightService insight,
+    CycleAnalysisOptions options,
+    CycleWriteCoordinator writes,
+    INotificationQueue notifications) : ICycleService {
+    /// <summary>
+    /// 获取花信如期通知的目标页面路径
+    /// </summary>
+    private const string CyclePage = "/cycles";
+
+    /// <summary>
+    /// 获取所有已定义的不适标记，用于校验非页面来源请求中的组合值
+    /// </summary>
+    private static readonly CycleSymptom KnownSymptoms =
+        CycleLabels.AllSymptoms.Aggregate(CycleSymptom.None, (all, item) => all | item);
+
+    public async Task<CycleDashboard> GetDashboardAsync(
+        int userId,
+        int page,
+        int pageSize,
+        int year,
+        int month,
+        CancellationToken cancellationToken = default) {
+        var relationshipId = await RequireRelationshipAsync(userId, cancellationToken);
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 50);
+        var selectedMonth = SafeMonth(year, month, clock.Today);
+
+        var records = await RecordsAsync(relationshipId, cancellationToken);
+        var total = records.Count;
+        var pageRecords = records
+            .OrderByDescending(item => item.StartDate)
+            .ThenByDescending(item => item.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToArray();
+
+        var projection = await ProjectAsync(
+            relationshipId,
+            records,
+            Span(selectedMonth, records),
+            cancellationToken);
+
+        return new CycleDashboard(
+            projection.Current(),
+            projection.Statistics,
+            projection.Calendar(selectedMonth),
+            new PagedList<CycleRecordItem>(
+                [.. pageRecords.Select(projection.Item)],
+                page,
+                pageSize,
+                total));
+    }
+
+    public async Task<CycleCalendarMonth> GetCalendarAsync(
+        int userId,
+        int year,
+        int month,
+        CancellationToken cancellationToken = default) {
+        var relationshipId = await RequireRelationshipAsync(userId, cancellationToken);
+        var selectedMonth = SafeMonth(year, month, clock.Today);
+        var records = await RecordsAsync(relationshipId, cancellationToken);
+        var projection = await ProjectAsync(relationshipId, records, Span(selectedMonth, records), cancellationToken);
+        return projection.Calendar(selectedMonth);
+    }
+
+    public async Task<string> GetHomeStatusAsync(int userId, CancellationToken cancellationToken = default) {
+        var relationshipId = await FindRelationshipAsync(userId, cancellationToken);
+        if (relationshipId is null) {
+            return "仅双方可查看";
+        }
+
+        var facts = await FactsAsync(relationshipId.Value, cancellationToken);
+        if (facts.Count == 0) {
+            return "共同记录第一封花信";
+        }
+
+        var statistics = analysis.Analyze(facts, clock.Today);
+        if (facts.Any(item => item.EndDate is null)) {
+            var active = facts.Single(item => item.EndDate is null);
+            return $"本次经期第 {Math.Max(1, clock.Today.DayNumber - active.StartDate.DayNumber + 1)} 天";
+        }
+
+        if (statistics.NextPrediction is not { } prediction) {
+            return "继续共同记录，周期参考会更准确";
+        }
+
+        var until = prediction.ExpectedStart.DayNumber - clock.Today.DayNumber;
+        return until switch {
+            > 0 => $"预计 {until} 天后到来",
+            0 => "预计日期为今天",
+            _ => $"已超过预计日期 {-until} 天"
+        };
+    }
+
+    public async Task<CycleWriteResult> StartAsync(
+        int userId,
+        string requestKey,
+        bool confirmSuspicious,
+        CancellationToken cancellationToken = default) =>
+        await CreateAsync(
+            userId,
+            new CycleRecordSubmission(clock.Today, null, string.Empty, requestKey, confirmSuspicious),
+            cancellationToken);
+
+    public async Task<CycleWriteResult> EndAsync(int userId, CancellationToken cancellationToken = default) {
+        var relationshipId = await FindRelationshipAsync(userId, cancellationToken);
+        if (relationshipId is null) {
+            return Forbidden();
+        }
+
+        await using var lease = await writes.EnterAsync(relationshipId.Value, cancellationToken);
+        var active = await db.CycleRecords.SingleOrDefaultAsync(
+            item => item.RelationshipId == relationshipId && item.EndDate == null,
+            cancellationToken);
+        if (active is null) {
+            return Conflict("当前没有正在进行的记录。");
+        }
+
+        if (clock.Today < active.StartDate) {
+            return Invalid("结束日期不能早于开始日期。");
+        }
+
+        active.EndDate = clock.Today;
+        Touch(active, userId);
+        _ = await db.SaveChangesAsync(cancellationToken);
+
+        await NotifyAsync(
+            userId,
+            actor => new PushMessage(
+                "本次花信已结束",
+                $"{actor}已登记结束日期。本次花信自 {active.StartDate:M 月 d 日}起，共 {clock.Today.DayNumber - active.StartDate.DayNumber + 1} 天。",
+                CyclePage,
+                $"cycle-end-{active.Id}"),
+            cancellationToken);
+
+        return new(CycleWriteStatus.Saved, "本次花信已完整记录，双方可以随时查看。", active.Id);
+    }
+
+    public async Task<CycleWriteResult> CreateAsync(
+        int userId,
+        CycleRecordSubmission submission,
+        CancellationToken cancellationToken = default) {
+        ArgumentNullException.ThrowIfNull(submission);
+        var relationshipId = await FindRelationshipAsync(userId, cancellationToken);
+        if (relationshipId is null) {
+            return Forbidden();
+        }
+
+        await using var lease = await writes.EnterAsync(relationshipId.Value, cancellationToken);
+        if (!ValidRequestKey(submission.RequestKey)) {
+            return Invalid("请求已失效，请刷新页面后重试。");
+        }
+
+        if (await WasProcessedAsync(relationshipId.Value, submission.RequestKey, cancellationToken)) {
+            return new(CycleWriteStatus.AlreadyProcessed, "本次登记已保存，无需重复提交。");
+        }
+
+        if (await HasActiveAsync(relationshipId.Value, cancellationToken)) {
+            return Conflict("已有一条正在进行的记录，请先登记结束日期。");
+        }
+
+        if (Validate(submission.StartDate, submission.EndDate, submission.Note, options.MaximumNoteLength) is { } invalid) {
+            return invalid;
+        }
+
+        var facts = await FactsAsync(relationshipId.Value, cancellationToken);
+        if (!submission.ConfirmSuspicious
+            && Doubt(facts, submission.StartDate, submission.EndDate) is { } warning) {
+            return new(CycleWriteStatus.RequiresConfirmation, warning);
+        }
+
+        var now = SiteClock.UtcNow;
+        var record = new CycleRecord {
+            RelationshipId = relationshipId.Value,
+            StartDate = submission.StartDate,
+            EndDate = submission.EndDate,
+            Note = Normalize(submission.Note, options.MaximumNoteLength),
+            CreatedByUserId = userId,
+            UpdatedByUserId = userId,
+            RequestKey = submission.RequestKey,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        _ = db.CycleRecords.Add(record);
+
+        try {
+            _ = await db.SaveChangesAsync(cancellationToken);
+
+            await NotifyAsync(
+                userId,
+                actor => new PushMessage(
+                    submission.EndDate is null ? "新的花信记录已开始" : "新增一条花信记录",
+                    submission.EndDate is { } end
+                        ? $"{actor}补记了 {submission.StartDate:M 月 d 日}至 {end:M 月 d 日}的花信记录。"
+                        : $"{actor}已登记 {submission.StartDate:M 月 d 日}为本次花信的开始日期。",
+                    CyclePage,
+                    $"cycle-record-{record.Id}"),
+                cancellationToken);
+
+            return new(
+                CycleWriteStatus.Saved,
+                submission.EndDate is null
+                    ? "开始日期已记下，接下来的变化也可以由两个人共同补充。"
+                    : "完整记录已保存，双方可以随时查看。",
+                record.Id);
+        } catch (DbUpdateException) {
+            db.Entry(record).State = EntityState.Detached;
+            return Conflict("另一方刚刚完成了相同操作，请刷新后查看。");
+        }
+    }
+
+    public async Task<CycleWriteResult> SaveDayAsync(
+        int userId,
+        CycleDaySubmission submission,
+        CancellationToken cancellationToken = default) {
+        ArgumentNullException.ThrowIfNull(submission);
+        var relationshipId = await FindRelationshipAsync(userId, cancellationToken);
+        if (relationshipId is null) {
+            return Forbidden();
+        }
+
+        if (submission.Date > clock.Today) {
+            return Invalid("不能补充未来日期的记录。");
+        }
+
+        // 这些字段将直接持久化，因此需要校验非页面来源请求中的枚举值与标记组合。
+        if (!Enum.IsDefined(submission.Flow)
+            || !Enum.IsDefined(submission.Mood)
+            || (submission.Symptoms & ~KnownSymptoms) != CycleSymptom.None) {
+            return Invalid("提交的内容不在可选范围内，请刷新页面后重试。");
+        }
+
+        // 额外保留一个字符，以准确区分达到长度上限与超过长度上限的输入。
+        var note = Normalize(submission.Note, options.MaximumDayNoteLength + 1);
+        if (note.Length > options.MaximumDayNoteLength) {
+            return Invalid($"这一天的补充说明不能超过 {options.MaximumDayNoteLength} 个字。");
+        }
+
+        await using var lease = await writes.EnterAsync(relationshipId.Value, cancellationToken);
+        var now = SiteClock.UtcNow;
+        var protection = submission.IsIntimate && Enum.IsDefined(submission.IntimacyProtection)
+            ? submission.IntimacyProtection
+            : CycleIntimacyProtection.Unset;
+        var outcome = submission.IsIntimate && Enum.IsDefined(submission.IntimacyOutcome)
+            ? submission.IntimacyOutcome
+            : CycleIntimacyOutcome.Unset;
+        var intimacyCount = submission.IsIntimate
+            ? Math.Clamp(submission.IntimacyCount, 1, 20)
+            : 0;
+        var empty = submission.Flow == CycleFlow.Unset
+            && submission.Mood == CycleMood.Unset
+            && submission.Pain <= 0
+            && submission.Symptoms == CycleSymptom.None
+            && !submission.IsIntimate
+            && note.Length == 0;
+
+        if (empty) {
+            return Invalid("至少填写一项状态");
+        }
+
+        _ = db.CycleDailyLogs.Add(new CycleDailyLog {
+            RelationshipId = relationshipId.Value,
+            Date = submission.Date,
+            Flow = submission.Flow,
+            Mood = submission.Mood,
+            Pain = Math.Clamp(submission.Pain, 0, 3),
+            Symptoms = submission.Symptoms,
+            IsIntimate = submission.IsIntimate,
+            IntimacyCount = intimacyCount,
+            IntimacyProtection = protection,
+            IntimacyOutcome = outcome,
+            Note = note,
+            CreatedByUserId = userId,
+            UpdatedByUserId = userId,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+
+        try {
+            _ = await db.SaveChangesAsync(cancellationToken);
+        } catch (DbUpdateException) {
+            return Conflict("这条补充暂时没有保存成功，请刷新后重试。");
+        }
+
+        // 每日补充可能包含敏感信息，通知仅提示记录已更新，不展示具体内容。
+        await NotifyAsync(
+            userId,
+            actor => new PushMessage(
+                "花信记录有新补充",
+                $"{actor}补充了 {submission.Date:M 月 d 日}的花信记录。",
+                CyclePage,
+                $"cycle-day-{submission.Date:yyyy-MM-dd}"),
+            cancellationToken);
+
+        return new CycleWriteResult(CycleWriteStatus.Saved, $"{submission.Date:M 月 d 日}新增了一条补充记录。");
+    }
+
+    public async Task<IReadOnlyList<CycleReminder>> GetDueRemindersAsync(
+        int userId,
+        CancellationToken cancellationToken = default) {
+        var relationshipId = await FindRelationshipAsync(userId, cancellationToken);
+        if (relationshipId is null) {
+            return [];
+        }
+
+        var facts = await FactsAsync(relationshipId.Value, cancellationToken);
+        return facts.Count == 0 ? [] : Due(facts, clock.Today);
+    }
+
+    public async Task<CycleNarrativeContext?> LatestNarrativeAsync(
+        int userId,
+        CancellationToken cancellationToken = default) {
+        var relationshipId = await FindRelationshipAsync(userId, cancellationToken);
+        if (relationshipId is null) {
+            return null;
+        }
+
+        var records = await RecordsAsync(relationshipId.Value, cancellationToken);
+        if (records.Count == 0) {
+            return null;
+        }
+
+        var projection = await ProjectAsync(
+            relationshipId.Value,
+            records,
+            Span(clock.Today, records),
+            cancellationToken);
+        return projection.Context(records[^1]);
+    }
+
+    public async Task<int> RefreshSummariesAsync(int limit, CancellationToken cancellationToken = default) {
+        if (!insight.UsesModel || limit <= 0) {
+            return 0;
+        }
+
+        var relationshipIds = await db.CycleRecords
+            .Select(item => item.RelationshipId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var written = 0;
+
+        foreach (var relationshipId in relationshipIds) {
+            if (written >= limit) {
+                break;
+            }
+
+            written += await RefreshOneAsync(relationshipId, limit - written, cancellationToken);
+        }
+
+        return written;
+    }
+
+    #region 私有方法
+
+    private async Task<int> RefreshOneAsync(int relationshipId, int limit, CancellationToken cancellationToken) {
+        var records = await RecordsAsync(relationshipId, cancellationToken);
+
+        var candidates = records
+            .Where(item => item.EndDate is not null)
+            .OrderByDescending(item => item.StartDate)
+            .ToArray();
+        if (candidates.Length == 0) {
+            return 0;
+        }
+
+        var projection = await ProjectAsync(relationshipId, records, Span(clock.Today, records), cancellationToken);
+        var written = 0;
+
+        foreach (var record in candidates) {
+            if (written >= limit) {
+                break;
+            }
+
+            var context = projection.Context(record);
+            var stamp = CycleNarrative.Stamp(context);
+            if (record.SummarySource == CycleSummarySource.Model
+                && record.Summary.Length > 0
+                && record.SummaryStamp == stamp) {
+                continue;
+            }
+
+            var summary = await insight.WriteAsync(context, cancellationToken);
+            if (!summary.FromModel) {
+                continue;
+            }
+
+            var tracked = await db.CycleRecords.SingleOrDefaultAsync(
+                item => item.Id == record.Id,
+                cancellationToken);
+            if (tracked is null) {
+                continue;
+            }
+
+            tracked.Summary = summary.Text;
+            tracked.SummarySource = CycleSummarySource.Model;
+            tracked.SummaryStamp = stamp;
+            tracked.SummaryUpdatedAt = summary.UpdatedAt;
+            written++;
+        }
+
+        if (written > 0) {
+            _ = await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return written;
+    }
+
+    private List<CycleReminder> Due(IReadOnlyList<CycleFact> facts, DateOnly today) {
+        var due = new List<CycleReminder>();
+
+        if (facts.FirstOrDefault(item => item.EndDate is null) is { } active) {
+            var days = today.DayNumber - active.StartDate.DayNumber + 1;
+            if (days > options.LongPeriodDays && days <= options.MaximumPeriodDays) {
+                due.Add(new CycleReminder(
+                    CycleReminderKind.ActiveTooLong,
+                    "请确认本次花信是否结束",
+                    $"本次花信已记录至第 {days} 天。如已结束，请补充结束日期。",
+                    $"cycle-active-{active.StartDate:yyyy-MM-dd}"));
+            }
+
+            // 当前经期尚未结束时，不生成下一周期的预测提醒。
+            return due;
+        }
+
+        if (analysis.Analyze(facts, today).NextPrediction is not { } prediction) {
+            return due;
+        }
+
+        var until = prediction.WindowStart.DayNumber - today.DayNumber;
+        if (until == options.ReminderLeadDays) {
+            due.Add(new CycleReminder(
+                CycleReminderKind.PredictionNear,
+                "花信预测窗口临近",
+                $"预计花信将在 {prediction.ExpectedStart:M 月 d 日}前后到来，并于 {until} 天后进入预测窗口。",
+                $"cycle-predict-{prediction.WindowStart:yyyy-MM-dd}"));
+        } else if (until == 0) {
+            due.Add(new CycleReminder(
+                CycleReminderKind.PredictionStart,
+                "花信预测窗口今日开始",
+                $"预计花信将在 {prediction.ExpectedStart:M 月 d 日}前后到来。如已开始，请及时登记。",
+                $"cycle-window-{prediction.WindowStart:yyyy-MM-dd}"));
+        }
+
+        return due;
+    }
+
+    private async Task NotifyAsync(
+        int userId,
+        Func<string, PushMessage> compose,
+        CancellationToken cancellationToken) {
+        ArgumentNullException.ThrowIfNull(compose);
+
+        var site = await settings.GetAsync(cancellationToken);
+        var role = await db.Users
+            .Where(user => user.Id == userId)
+            .Select(user => user.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        _ = notifications.Enqueue(NotificationRequest.ToPartner(
+            NotificationTopic.Cycle,
+            userId,
+            compose(site.RoleName(role))));
+    }
+
+    private async Task<CycleProjection> ProjectAsync(
+        int relationshipId,
+        IReadOnlyList<CycleRecord> records,
+        (DateOnly From, DateOnly To) span,
+        CancellationToken cancellationToken) {
+        var logs = await db.CycleDailyLogs
+            .Where(item => item.RelationshipId == relationshipId && item.Date >= span.From && item.Date <= span.To)
+            .Include(item => item.CreatedByUser)
+            .Include(item => item.UpdatedByUser)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        var site = await settings.GetAsync(cancellationToken);
+        return new CycleProjection(analysis, options, site, clock, records, logs);
+    }
+
+    private Task<List<CycleRecord>> RecordsAsync(int relationshipId, CancellationToken cancellationToken) =>
+        db.CycleRecords
+            .Where(item => item.RelationshipId == relationshipId)
+            .Include(item => item.CreatedByUser)
+            .Include(item => item.UpdatedByUser)
+            .OrderBy(item => item.StartDate)
+            .ThenBy(item => item.Id)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+    // 小结的事实指纹覆盖目标周期之前的历史，因此每日记录需要一次取全，
+    // 否则同一条记录在不同页面算出的指纹会不一致，已保存的模型小结将无法命中。
+    private (DateOnly From, DateOnly To) Span(DateOnly month, List<CycleRecord> records) {
+        var first = new DateOnly(month.Year, month.Month, 1);
+        var from = first.AddDays(-(7 + options.MaximumPeriodDays));
+        var to = first.AddMonths(1).AddDays(7 + options.MaximumPeriodDays);
+
+        if (records.Count > 0) {
+            var earliest = records.Min(item => item.StartDate);
+            var latest = records.Max(item => item.EndDate ?? clock.Today);
+            from = from < earliest ? from : earliest;
+            to = to > latest ? to : latest;
+        }
+
+        return (from, to);
+    }
+
+    private CycleWriteResult? Validate(DateOnly startDate, DateOnly? endDate, string? note, int noteLimit) {
+        if (endDate is { } end) {
+            if (startDate > end) {
+                return Invalid("结束日期不能早于开始日期。");
+            }
+
+            if (end.DayNumber - startDate.DayNumber + 1 > options.MaximumPeriodDays) {
+                return Invalid($"单次记录不能超过 {options.MaximumPeriodDays} 天，请检查日期。");
+            }
+        }
+
+        if ((endDate ?? startDate) > clock.Today) {
+            return Invalid("不能登记未来日期。");
+        }
+
+        return Normalize(note, noteLimit + 1).Length > noteLimit
+            ? Invalid($"备注不能超过 {noteLimit} 个字。")
+            : null;
+    }
+
+    private string? Doubt(IReadOnlyList<CycleFact> facts, DateOnly startDate, DateOnly? endDate) {
+        var end = endDate ?? startDate;
+        if (facts.Any(item => Overlaps(startDate, end, item.StartDate, item.EndDate ?? clock.Today))) {
+            return "所填日期与已有记录重叠，可能是双方重复登记。";
+        }
+
+        return analysis.IsSuspiciousStart(facts, startDate, out var reason) ? reason : null;
+    }
+
+    private async Task<int> RequireRelationshipAsync(int userId, CancellationToken cancellationToken) =>
+        await FindRelationshipAsync(userId, cancellationToken)
+        ?? throw new UnauthorizedAccessException("花信如期仅对当前情侣关系中的双方开放。");
+
+    private async Task<int?> FindRelationshipAsync(int userId, CancellationToken cancellationToken) =>
+        await db.Users
+            .Where(user => user.Id == userId
+                && user.IsActive
+                && user.CoupleRelationshipId != null
+                && user.CoupleRelationship!.IsActive
+                && (user.Role == UserRole.Boy || user.Role == UserRole.Girl))
+            .Select(user => user.CoupleRelationshipId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+    private async Task<List<CycleFact>> FactsAsync(int relationshipId, CancellationToken cancellationToken) =>
+        await db.CycleRecords
+            .Where(item => item.RelationshipId == relationshipId)
+            .OrderBy(item => item.StartDate)
+            .Select(item => new CycleFact(item.StartDate, item.EndDate))
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+    private Task<bool> HasActiveAsync(int relationshipId, CancellationToken cancellationToken) =>
+        db.CycleRecords.AnyAsync(item => item.RelationshipId == relationshipId && item.EndDate == null, cancellationToken);
+
+    private Task<bool> WasProcessedAsync(int relationshipId, string requestKey, CancellationToken cancellationToken) =>
+        db.CycleRecords.AnyAsync(item => item.RelationshipId == relationshipId && item.RequestKey == requestKey, cancellationToken);
+
+    private static void Touch(CycleRecord record, int userId) {
+        record.UpdatedByUserId = userId;
+        record.UpdatedAt = SiteClock.UtcNow;
+        record.SummaryStamp = string.Empty;
+    }
+
+    private static DateOnly SafeMonth(int year, int month, DateOnly fallback) =>
+        year is >= 1900 and <= 2200 && month is >= 1 and <= 12
+            ? new DateOnly(year, month, 1)
+            : new DateOnly(fallback.Year, fallback.Month, 1);
+
+    private static bool Overlaps(DateOnly firstStart, DateOnly firstEnd, DateOnly secondStart, DateOnly secondEnd) =>
+        firstStart <= secondEnd && secondStart <= firstEnd;
+
+    private static bool ValidRequestKey(string? requestKey) => Guid.TryParse(requestKey, out _);
+
+    private static string Normalize(string? note, int limit) {
+        var trimmed = (note ?? string.Empty).Trim();
+        return trimmed.Length <= limit ? trimmed : trimmed[..limit];
+    }
+
+    private static CycleWriteResult Forbidden() => new(CycleWriteStatus.Forbidden, "此操作仅对当前情侣关系中的双方开放。");
+
+    private static CycleWriteResult Conflict(string message) => new(CycleWriteStatus.Conflict, message);
+
+    private static CycleWriteResult Invalid(string message) => new(CycleWriteStatus.Invalid, message);
+
+    #endregion
+}

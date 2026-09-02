@@ -14,7 +14,7 @@
 
     var storageDrivers = new[]
     {
-        new SelectListItem("自动（OSS 填全了就用 OSS）", ""),
+        new SelectListItem("自动（OSS 配置完整时使用 OSS）", ""),
         new SelectListItem("本地目录", "Local"),
         new SelectListItem("阿里云 OSS", "AliyunOss")
     };
@@ -26,7 +26,7 @@
         new SelectListItem("不加密", "None")
     };
 }
-<form method="post">
+<form method="post" data-dirty-guard>
     @if (!string.IsNullOrEmpty(Model.Error))
     {
         <p class="admin-error">@Icon("circle-alert")@Model.Error</p>
@@ -82,11 +82,11 @@
             </label>
             <label class="field">
                 <span>男主头像地址</span>
-                <input asp-for="Input.BoyAvatar" type="text" maxlength="500" placeholder="留空显示文字头像">
+                <input asp-for="Input.BoyAvatar" type="text" maxlength="500" placeholder="留空时显示文字头像">
             </label>
             <label class="field">
                 <span>女主头像地址</span>
-                <input asp-for="Input.GirlAvatar" type="text" maxlength="500" placeholder="留空显示文字头像">
+                <input asp-for="Input.GirlAvatar" type="text" maxlength="500" placeholder="留空时显示文字头像">
             </label>
             <label class="field">
                 <span>男主个性短句</span>
@@ -128,7 +128,7 @@
     <div class="admin-panel">
         <h2>@Icon("image")附件存储</h2>
         <p class="admin-panel-hint">
-            本地和 OSS 用的是同一套路径规则，把 uploads 整个传上去再切过来，已有图片的地址不会变。
+            本地存储与 OSS 使用相同的路径规则。完整同步 <code>uploads</code> 后再切换存储策略，已有图片地址将保持不变。
         </p>
         <div class="field-grid">
             <label class="field">
@@ -158,7 +158,7 @@
             </label>
             <label class="field">
                 <span>自定义 API 端点</span>
-                <input asp-for="Input.OssApiEndpoint" type="text" maxlength="200" placeholder="留空按 Region 拼">
+                <input asp-for="Input.OssApiEndpoint" type="text" maxlength="200" placeholder="留空时根据 Region 自动生成">
             </label>
         </div>
     </div>
@@ -171,7 +171,7 @@
             </span>
         </div>
         <p class="admin-panel-hint">
-            邮件与 Web Push 可以同时工作；单个渠道失败不会阻止另一个渠道继续投递
+            邮件与 Web Push 可以同时启用；单个渠道失败不会影响另一个渠道继续投递。
         </p>
 
         <label class="field-check email-master">
@@ -198,7 +198,7 @@
             </label>
             <label class="field">
                 <span>SMTP 密码 / 邮箱授权码</span>
-                <input asp-for="Input.EmailPassword" type="password" maxlength="500" autocomplete="new-password" placeholder="留空保持现有密码">
+                <input asp-for="Input.EmailPassword" type="password" maxlength="500" autocomplete="new-password" placeholder="留空以保留现有密码">
             </label>
             <label class="field">
                 <span>通知发送邮箱（From）</span>
@@ -215,14 +215,14 @@
         </div>
     </div>
 
-    @* 心意的发放和价格区间只让男主动，女主登录时这一块整个不出现 *@
+    @* 心意发放与价格区间仅允许男主账号配置。 *@
     @if (Model.CanEditHeartRules)
     {
         <div class="admin-panel">
             <h2>@Icon("coins")心意规则</h2>
 
             <p class="admin-panel-hint">
-                心意只用来记录彼此的投入，每项奖励每天最多获得一次，重复记录不会重复累计
+                心意用于记录彼此的投入。每项奖励每天最多获得一次，重复记录不会重复累计。
             </p>
 
             <div class="field-grid">
